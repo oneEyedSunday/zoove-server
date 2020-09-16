@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gofiber/cors"
 	"github.com/gofiber/fiber"
-	"github.com/joho/godotenv"
 )
 
 type HostSpotifyClientAuth struct {
@@ -33,28 +33,34 @@ const (
 	HostAppleMusic = "applemusic"
 )
 
-func loadEnv() {
-	envr := os.Getenv("ENV")
-	err := godotenv.Load(".env." + envr)
-	if err != nil {
-		log.Println("Error reading the env file")
-		log.Println(err)
-		panic(err)
-	}
-}
+// func loadEnv() {
+// 	envr := os.Getenv("ENV")
+// 	err := godotenv.Load(".env." + envr)
+// 	if err != nil {
+// 		log.Println("Error reading the env file")
+// 		log.Println(err)
+// 		panic(err)
+// 	}
+// }
 
-func init() {
-	loadEnv()
-}
+// func init() {
+// 	loadEnv()
+// }
 
 func main() {
 	app := fiber.New()
+
+	app.Static("/", "./client/build")
 
 	app.Get("/api/v1", func(ctx *fiber.Ctx) {
 		ctx.Status(http.StatusOK).Send("Hi")
 	})
 
 	app.Use(ExtractInfo)
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{http.MethodGet, http.MethodPatch, http.MethodPost, http.MethodOptions, http.MethodDelete},
+	}))
 	app.Get("/api/v1/search", EquivalentsHandler)
 
 	port := os.Getenv("PORT")
@@ -192,14 +198,15 @@ func FetchEquivalents(search SearchTrack) ([]*SearchedSong, error) {
 }
 
 type SearchedSong struct {
-	Title       string
-	Duration    int
-	Artistes    []string
-	URL         string
-	Preview     string
-	Cover       string
-	ReleaseDate string
-	Explicit    bool
+	Title       string   `json:"title"`
+	Duration    int      `json:"duration"`
+	Artistes    []string `json:"artistes"`
+	URL         string   `json:"url"`
+	Preview     string   `json:"preview"`
+	Cover       string   `json:"cover"`
+	ReleaseDate string   `json:"release_date"`
+	Explicit    bool     `json:"explicit"`
+	Platform    string   `json:"platform"`
 }
 
 func (search *SearchTrack) HostDeezerSearchForTrack() (*SearchedSong, error) {
@@ -225,6 +232,7 @@ func (search *SearchTrack) HostDeezerSearchForTrack() (*SearchedSong, error) {
 		track.ReleaseDate = ""
 		track.Title = base.Title
 		track.URL = base.Link
+		track.Platform = "deezer"
 
 		return track, nil
 	}
@@ -233,7 +241,8 @@ func (search *SearchTrack) HostDeezerSearchForTrack() (*SearchedSong, error) {
 
 func (search *SearchTrack) HostSpotifySearchForTrack() (*SearchedSong, error) {
 	track := &SearchedSong{}
-	payload := fmt.Sprintf("track:%s artist:%s album:%s", search.Title, search.ArtisteName, search.AlbumName)
+	search.IsAlbum = false
+	payload := fmt.Sprintf("track:%s artist:%s", search.Title, search.ArtisteName)
 	escaped := url.QueryEscape(payload)
 	searchURL := fmt.Sprintf("%sv1/search", os.Getenv("SPOTIFY_API_BASE"))
 	url := fmt.Sprintf("%s?q=%s&type=track", searchURL, escaped)
@@ -267,7 +276,8 @@ func (search *SearchTrack) HostSpotifySearchForTrack() (*SearchedSong, error) {
 		track.Preview = base.PreviewURL
 		track.ReleaseDate = base.Album.ReleaseDate
 		track.Title = base.Name
-		track.URL = base.Href
+		track.URL = base.ExternalUrls.Spotify
+		track.Platform = "spotify"
 		return track, nil
 	}
 
@@ -317,17 +327,12 @@ func HostSpotifyFetchMetaData(url string) (*SearchTrack, error) {
 		return nil, err
 	}
 
-	if output.Album.AlbumType == "single" {
-		full.IsAlbum = false
-		full.AlbumName = ""
-	} else if output.Album.AlbumType == "album" {
-		full.IsAlbum = true
-		full.AlbumName = output.Album.Name
-	}
+	full.AlbumName = output.Album.Name
 	full.ArtisteName = output.Album.Artists[0].Name
 	full.TrackNumber = output.TrackNumber
 	full.Title = output.Name
 	full.Platform = "spotify"
+	full.URL = output.ExternalUrls.Spotify
 	return full, nil
 }
 
