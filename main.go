@@ -12,9 +12,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"zoove/controllers"
+	"zoove/middleware"
 
 	"github.com/gofiber/cors"
 	"github.com/gofiber/fiber"
+	"github.com/gomodule/redigo/redis"
 )
 
 type HostSpotifyClientAuth struct {
@@ -47,11 +50,16 @@ const (
 // 	loadEnv()
 // }
 
+var pool *redis.Pool
+
 func main() {
 	app := fiber.New()
 
 	app.Static("/", "./client/build")
+	jaeger := controllers.NewJaeger(pool)
 
+	app.Use(middleware.ExtractInfoMetadata)
+	app.Get("/api/v1.1/search", jaeger.JaegerHandler)
 	app.Get("/api/v1", func(ctx *fiber.Ctx) {
 		ctx.Status(http.StatusOK).Send("Hi")
 	})
@@ -144,7 +152,7 @@ func EquivalentsHandler(ctx *fiber.Ctx) {
 		}
 		track = *info
 	} else if extracted.Host == HostSpotify {
-		txURL := fmt.Sprintf("%sv1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), extracted.ID)
+		txURL := fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), extracted.ID)
 		out, err := HostSpotifyFetchMetaData(txURL)
 		if err != nil {
 			log.Println("Error getting hotspot stuff")
