@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -15,6 +16,67 @@ import (
 
 	"github.com/gomodule/redigo/redis"
 )
+
+func HostDeezerExtractTitle(title string) string {
+	// we want to check for the first occurence of "Feat"
+	ind := strings.Index(title, "(feat")
+	if ind == -1 {
+		return title
+	}
+	out := title[:ind]
+	return out
+}
+
+func (search *TrackToSearch) HostDeezerSearchTrack() (*types.SingleTrack, error) {
+	conn := search.Pool.Get()
+	defer conn.Close()
+
+	title := HostDeezerExtractTitle(search.Title)
+	payload := url.QueryEscape(fmt.Sprintf("track:\"%s\" artist:\"%s\"", title, search.Artiste))
+	url := fmt.Sprintf("%s/search?q=%s", os.Getenv("DEEZER_API_BASE"), payload)
+	output := &types.HostDeezerSearchTrack{}
+	err := MakeDeezerRequest(url, output)
+	if err != nil {
+		log.Println("Error searching on deezer for track")
+		log.Println(err)
+	}
+
+	// log.Printf("Output from deezer search%#v", output)
+	if len(output.Data) > 0 {
+		base := output.Data[0]
+		key := fmt.Sprintf("%s-%s", util.HostDeezer, string(base.ID))
+
+		if err != nil {
+			log.Println("Error getting from redis")
+			log.Println(err)
+			if err == redis.ErrNil {
+				log.Println("The track has not been previously cached.")
+				_, err := redis.String(conn.Do("SET", key, output))
+				if err != nil {
+					log.Println("Error inserting track into DB")
+				}
+			}
+		}
+
+		id := strconv.Itoa(base.ID)
+		track := &types.SingleTrack{
+			Cover:    base.Album.Cover,
+			Artistes: []string{base.Artist.Name},
+			Duration: base.Duration * 1000,
+			Explicit: base.ExplicitLyrics,
+			ID:       id,
+			Platform: util.HostDeezer,
+			Preview:  base.Preview,
+			Title:    base.Title,
+			URL:      base.Link,
+			// ReleaseDate: "",
+		}
+
+		return track, nil
+	}
+
+	return nil, nil
+}
 
 func HostDeezerGetSingleTrack(deezerID string, pool *redis.Pool) (*types.SingleTrack, error) {
 	conn := pool.Get()
@@ -63,6 +125,7 @@ func HostDeezerGetSingleTrack(deezerID string, pool *redis.Pool) (*types.SingleT
 }
 
 func MakeDeezerRequest(url string, out interface{}) error {
+	// log.Printf("Deezer UEL is: %s", url)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		log.Println("Error creating new HTTP request")
@@ -92,6 +155,7 @@ func MakeDeezerRequest(url string, out interface{}) error {
 		return err
 	}
 
+	// log.Printf("Body is: %s", string(body))
 	err = json.Unmarshal(body, out)
 	if err != nil {
 		log.Println("Error unserializing the response into json")

@@ -18,6 +18,56 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+type TrackToSearch struct {
+	Title   string
+	Artiste string
+	Pool    *redis.Pool
+}
+
+func NewTrackToSearch(title, artiste string, pool *redis.Pool) *TrackToSearch {
+	return &TrackToSearch{Artiste: artiste, Title: title, Pool: pool}
+}
+
+func (search *TrackToSearch) HostSpotifySearchTrack() (*types.SingleTrack, error) {
+	payload := url.QueryEscape(fmt.Sprintf("track:%s artist:%s", search.Title, search.Artiste))
+	searchURL := fmt.Sprintf("%s/v1/search?q=%s&type=track", os.Getenv("SPOTIFY_API_BASE"), payload)
+	output := &types.HostSpotifySearchTrack{}
+	token, err := GetSpotifyAuthToken()
+	if err != nil {
+		log.Println("Error authenticating spotify and returning needed tokens")
+		log.Println(err)
+	}
+
+	err = MakeSpotifyRequest(searchURL, token.AccessToken, output)
+	if err != nil {
+		log.Println("Error authorizing spotify")
+		log.Println(err)
+		return nil, err
+	}
+
+	if len(output.Tracks.Items[0].Artists) > 0 {
+		base := output.Tracks.Items[0]
+		artistes := []string{}
+		for i := range output.Tracks.Items[0].Artists {
+			artistes = append(artistes, output.Tracks.Items[0].Artists[i].Name)
+		}
+		track := &types.SingleTrack{
+			Cover:       base.Album.Images[0].URL,
+			Duration:    base.DurationMs,
+			Explicit:    base.Explicit,
+			ID:          base.ID,
+			Platform:    util.HostSpotify,
+			Preview:     base.PreviewURL,
+			ReleaseDate: base.Album.ReleaseDate,
+			Title:       base.Name,
+			URL:         base.ExternalUrls.Spotify,
+			Artistes:    artistes,
+		}
+		return track, nil
+	}
+	return nil, nil
+}
+
 func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.SingleTrack, error) {
 	conn := pool.Get()
 	defer conn.Close()
@@ -29,8 +79,8 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 			// payload := fmt.Sprintf("track:%s artist:%s")
 			// escaped := url.QueryEscape(payload)
 			// token := &types.HostSpotifyAuthResponse{}
-			spotifyAuthTokn, err := GetSpotifyAuthToken()
-			log.Printf("Spotify auth response is: %#v", spotifyAuthTokn)
+			tokens, err := GetSpotifyAuthToken()
+			log.Printf("Spotify auth response is: %#v", tokens)
 			if err != nil {
 				log.Println("Error getting the spotify token")
 				log.Println(err)
@@ -38,8 +88,7 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 			}
 
 			sptf := &types.HostSpotifyTrack{}
-			token := spotifyAuthTokn.(*types.HostSpotifyAuthResponse)
-			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID), token.AccessToken, sptf)
+			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID), tokens.AccessToken, sptf)
 			log.Printf("ody")
 			log.Printf("SPOTIFY SEARCH IS: %#v", sptf)
 			single := &types.SingleTrack{
@@ -50,7 +99,7 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 				Platform:    util.HostSpotify,
 				Preview:     sptf.PreviewURL,
 				ReleaseDate: sptf.Album.ReleaseDate,
-				Title:       sptf.Album.Name,
+				Title:       sptf.Name,
 				URL:         sptf.ExternalUrls.Spotify,
 			}
 			for _, elem := range sptf.Artists {
@@ -81,7 +130,7 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 	return single, nil
 }
 
-func GetSpotifyAuthToken() (interface{}, error) {
+func GetSpotifyAuthToken() (*types.HostSpotifyAuthResponse, error) {
 
 	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
 	spotifySecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
@@ -124,6 +173,8 @@ func GetSpotifyAuthToken() (interface{}, error) {
 }
 
 func MakeSpotifyRequest(url, token string, out interface{}) error {
+	// log.Printf("URL is: %s", url)
+	// log.Printf("Token is: %s", token)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	if err != nil {

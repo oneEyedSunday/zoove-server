@@ -59,9 +59,15 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) {
 				return
 			}
 		}
-		tracks = append(tracks, track)
+		search := platforms.NewTrackToSearch(track.Title, track.Artistes[0], jaeger.Pool)
+		spot, err := search.HostSpotifySearchTrack()
+		if err != nil {
+			log.Println("Error fetching spotify search")
+			log.Println(err)
+		}
+		track.ReleaseDate = spot.ReleaseDate
+		tracks = append(tracks, track, spot)
 	} else if extracted.Host == util.HostSpotify {
-		log.Println("Its spotify")
 		track, err := platforms.HostSpotifyGetSingleTrack(extracted.ID, jaeger.Pool)
 		if err != nil {
 			log.Println("Error getting the track from Spotify")
@@ -72,7 +78,18 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) {
 				return
 			}
 		}
-		tracks = append(tracks, track)
+		search := platforms.NewTrackToSearch(track.Title, track.Artistes[0], jaeger.Pool)
+		deez, err := search.HostDeezerSearchTrack()
+		if err != nil {
+			log.Println("Error getting deezer song")
+			log.Println(err)
+		}
+		// this is because spotify always has release date. but now, remember that we're currently
+		// checking if track has been cached. We're still leaving this 'cos its caching our calls
+		// right now. and thats what we need. but since relasedate real value can be gotten here, simply
+		// using the value here.
+		deez.ReleaseDate = track.ReleaseDate
+		tracks = append(tracks, track, deez)
 	}
 
 	conn := jaeger.Pool.Get()
