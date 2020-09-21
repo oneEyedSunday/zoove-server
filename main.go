@@ -14,6 +14,7 @@ import (
 	"strings"
 	"zoove/controllers"
 	"zoove/middleware"
+	"zoove/platforms"
 
 	"github.com/gofiber/cors"
 	"github.com/gofiber/fiber"
@@ -57,7 +58,7 @@ func main() {
 
 	app.Static("/", "./client/build")
 	jaeger := controllers.NewJaeger(pool)
-
+	app.Get("/:platform/oauth", platforms.AuthorizeUser)
 	app.Use(middleware.ExtractInfoMetadata)
 	app.Get("/api/v1.1/search", jaeger.JaegerHandler)
 	app.Get("/api/v1", func(ctx *fiber.Ctx) {

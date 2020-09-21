@@ -17,6 +17,23 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+func HostDeezerUserAuth(authcode string) (string, error) {
+	type deezerToken struct {
+		AccessToken string `json:"access_token"`
+		Expires     int    `json:"expires"`
+	}
+
+	tok := &deezerToken{}
+	url := fmt.Sprintf("%s/access_token.php?app_id=%s&secret=%s&code=%s&output=json", os.Getenv("DEEZER_AUTH_BASE"), os.Getenv("DEEZER_APP_ID"), os.Getenv("DEEZER_APP_SECRET"), authcode)
+	err := MakeDeezerRequest(url, tok)
+	if err != nil {
+		log.Println("Error authing user with code.")
+		log.Println(err)
+		return "", err
+	}
+	return tok.AccessToken, nil
+}
+
 func HostDeezerExtractTitle(title string) string {
 	// we want to check for the first occurence of "Feat"
 	ind := strings.Index(title, "(feat")
@@ -141,6 +158,7 @@ func MakeDeezerRequest(url string, out interface{}) error {
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	defer res.Body.Close()
+	// log.Printf("Body of response: %s", string(body))
 	if strings.Contains(string(body), "{\"error\"") {
 		return errors.NotFound
 	}
@@ -163,4 +181,19 @@ func MakeDeezerRequest(url string, out interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func HostDeezerFetchUserProfile(token string) (*types.HostDeezerUserProfile, error) {
+	url := fmt.Sprintf("%s/user/me?access_token=%s", os.Getenv("DEEZER_API_BASE"), token)
+	log.Printf("URL is: %s", url)
+	profile := &types.HostDeezerUserProfile{}
+	err := MakeDeezerRequest(url, profile)
+	if err != nil {
+		log.Println("Error fetchin user deezer profile")
+		log.Println(err)
+		return nil, err
+	}
+
+	log.Printf("User Deezer profile: %#v", profile)
+	return profile, nil
 }

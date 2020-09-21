@@ -276,3 +276,19 @@ type HostDeezerSearchTrack struct {
 	} `json:"data"`
 	Total int `json:"total"`
 }
+
+type HostDeezerUserProfile struct {
+	ID        int64  `json:"id"`
+	Email     string `json:"email,omitempty"`
+	FirstName string `json:"firstname,omitempty"`
+	LastName  string `json:"lastname,omitempty"`
+	Avatar    string `json:"picture,omitempty"`
+	Platform  string `json:"platform,omitempty"`
+	Gender    string `json:"gender,omitempty"`
+	Country   string `json:"country,omitempty"`
+	Language  string `json:"lang,omitempty"`
+	Playlist  string `json:"tracklist,omitempty"`
+	// Explicit  bool   `json:"lang"`
+	// TODO: handle explicit content. Later...
+	// Token    string `json:"token"`
+}
