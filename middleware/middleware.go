@@ -1,26 +1,24 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"zoove/db"
 	"zoove/types"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber"
 )
 
 func ExtractInfoMetadata(ctx *fiber.Ctx) {
 	rawURL := ctx.Query("track")
-	if rawURL == "" {
-		log.Println("the req is invalid")
-		ctx.Status(http.StatusBadRequest).JSON(fiber.Map{"message": "The request is missing important part", "error": "Missing track query parameter"})
-		return
-	}
-
 	song, err := url.QueryUnescape(rawURL)
+
 	if err != nil {
 		log.Println("Error escaping URL")
 		ctx.Next(err)
@@ -59,4 +57,29 @@ func ExtractInfoMetadata(ctx *fiber.Ctx) {
 
 	ctx.Locals("extractedInfo", midd)
 	ctx.Next()
+}
+
+type AuthenticateMiddleware struct {
+	DB *db.PrismaClient
+}
+
+func (auth *AuthenticateMiddleware) AuthenticateUser(ctx *fiber.Ctx) {
+	ten := ctx.Locals("user").(*jwt.Token)
+	claims := ten.Claims.(*types.Token)
+	ccx := context.TODO()
+	user, err := auth.DB.User.FindOne(db.User.UUID.Equals(claims.UUID)).Exec(ccx)
+	if err != nil {
+		if err == db.ErrNotFound {
+			log.Println("User with that UUID doesnt exist")
+			ctx.Status(http.StatusNotFound).JSON(fiber.Map{"message": "User not found", "error": err})
+			return
+		}
+	}
+
+	ctx.Locals("uuid", user.UUID)
+	ctx.Next()
+}
+
+func NewAuthUserMiddleware(db *db.PrismaClient) *AuthenticateMiddleware {
+	return &AuthenticateMiddleware{DB: db}
 }

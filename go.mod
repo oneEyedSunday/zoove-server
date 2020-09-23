@@ -9,5 +9,6 @@ require (
 	github.com/gorilla/schema v1.2.0 // indirect
 	github.com/joho/godotenv v1.3.0
 	github.com/klauspost/compress v1.11.0 // indirect
+	github.com/prisma/prisma-client-go v0.0.9 // indirect
 	golang.org/x/sys v0.0.0-20200918174421-af09f7315aff // indirect
 )

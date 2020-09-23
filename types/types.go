@@ -1,5 +1,7 @@
 package types
 
+import "github.com/dgrijalva/jwt-go"
+
 type SingleTrack struct {
 	Title       string   `json:"title"`
 	Duration    int      `json:"duration"`
@@ -291,4 +293,17 @@ type HostDeezerUserProfile struct {
 	// Explicit  bool   `json:"lang"`
 	// TODO: handle explicit content. Later...
 	// Token    string `json:"token"`
+}
+
+type UserProfile struct {
+	ID    int    `json:"id"`
+	Email string `json:"email"`
+}
+
+type Token struct {
+	jwt.StandardClaims
+	Platform      string
+	PlatformID    string
+	PlatformToken string
+	UUID          string
 }
