@@ -2,7 +2,9 @@ package util
 
 import (
 	"net/http"
+	"zoove/types"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gofiber/fiber"
 )
 
@@ -37,8 +39,8 @@ func RequestUnAuthorized(ctx *fiber.Ctx, err error) {
 }
 
 // RequestCreated sends back a statusCreated to the client
-func RequestCreated(ctx *fiber.Ctx) {
-	ctx.Status(http.StatusCreated).Send(fiber.Map{"message": "The resource has been created", "error": nil, "status": http.StatusCreated, "data": nil})
+func RequestCreated(ctx *fiber.Ctx, data interface{}) {
+	ctx.Status(http.StatusCreated).Send(fiber.Map{"message": "The resource has been created", "error": nil, "status": http.StatusCreated, "data": data})
 }
 
 // NotFound sends back a statusNotFound response to the client
@@ -48,4 +50,20 @@ func NotFound(ctx *fiber.Ctx) {
 
 func InternalServerError(ctx *fiber.Ctx, err error) {
 	ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{"message": "Internal Server Error", "error": err, "status": http.StatusInternalServerError, "data": nil})
+}
+
+// SignJwtToken signs the token that is returned for a user
+func SignJwtToken(claims *types.Token, secret string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &types.Token{
+		PlatformToken: claims.PlatformToken,
+		Platform:      claims.Platform,
+		UUID:          claims.UUID,
+		PlatformID:    claims.PlatformID,
+	})
+
+	tokenString, err := token.SignedString([]byte(secret))
+	if err != nil {
+		return "", err
+	}
+	return tokenString, nil
 }

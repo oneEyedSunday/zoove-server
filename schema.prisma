@@ -18,4 +18,5 @@ model User {
   country   String
   lang      String
   uuid      String   @unique
+  email     String   @unique
 }

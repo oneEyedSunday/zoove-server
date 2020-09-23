@@ -7,13 +7,30 @@ import (
 	"zoove/controllers"
 	"zoove/db"
 	"zoove/middleware"
+	"zoove/types"
 
 	"github.com/gofiber/cors"
 	"github.com/gofiber/fiber"
+	jwtware "github.com/gofiber/jwt"
 	"github.com/gomodule/redigo/redis"
+	"github.com/joho/godotenv"
 )
 
 var pool *redis.Pool
+
+func loadEnv() {
+	envr := os.Getenv("ENV")
+	err := godotenv.Load(".env." + envr)
+	if err != nil {
+		log.Println("Error reading the env file")
+		log.Println(err)
+		// panic(err)
+	}
+}
+
+func init() {
+	loadEnv()
+}
 
 func main() {
 	app := fiber.New()
@@ -43,6 +60,12 @@ func main() {
 	}))
 	app.Static("/", "./client/build")
 	app.Get("/:platform/oauth", userHandler.AuthorizeUser)
+
+	app.Use(jwtware.New(
+		jwtware.Config{SigningKey: []byte(os.Getenv("JWT_SECRET")),
+			Claims:     &types.Token{},
+			ContextKey: "user",
+		}))
 	app.Use(authentication.AuthenticateUser)
 	app.Get("/api/v1.1/me", userHandler.GetUserProfile)
 	app.Use(middleware.ExtractInfoMetadata)
