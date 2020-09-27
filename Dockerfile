@@ -2,7 +2,7 @@ FROM golang:1.14
 
 COPY . /app
 WORKDIR /app
-RUN go get ./
+RUN go get .
 ENV PORT=8300
 ENV GOOS linux
 ENV DB_URL=postgres://lcrthgjnbptxly:607a5ebcbf37eb56a92657e6494721a0946d500fba203794632bb50de0b274a0@ec2-107-20-104-234.compute-1.amazonaws.com:5432/d5vtfa53giodmc
