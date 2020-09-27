@@ -48,3 +48,4 @@ jobs:
           heroku_email: onigbindeayomide@gmail.com
           usedocker: true
           docker_heroku_process_type: web
+          dontuseforce: false
