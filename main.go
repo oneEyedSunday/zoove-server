@@ -8,6 +8,7 @@ import (
 	"zoove/db"
 	"zoove/middleware"
 	"zoove/types"
+	"zoove/util"
 
 	"github.com/gofiber/cors"
 	"github.com/gofiber/fiber"
@@ -58,8 +59,15 @@ func main() {
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{http.MethodGet, http.MethodPatch, http.MethodPost, http.MethodOptions, http.MethodDelete},
 	}))
-	app.Static("/", "./client/build")
+
+	app.Get("/", func(ctx *fiber.Ctx) {
+		util.RequestOk(ctx, nil)
+	})
+
 	app.Get("/:platform/oauth", userHandler.AuthorizeUser)
+
+	app.Use(middleware.ExtractInfoMetadata)
+	app.Get("/api/v1.1/search", jaeger.JaegerHandler)
 
 	app.Use(jwtware.New(
 		jwtware.Config{SigningKey: []byte(os.Getenv("JWT_SECRET")),
@@ -68,8 +76,6 @@ func main() {
 		}))
 	app.Use(authentication.AuthenticateUser)
 	app.Get("/api/v1.1/me", userHandler.GetUserProfile)
-	app.Use(middleware.ExtractInfoMetadata)
-	app.Get("/api/v1.1/search", jaeger.JaegerHandler)
 
 	app.Get("/api/v1", func(ctx *fiber.Ctx) {
 		ctx.Status(http.StatusOK).Send("Hi")

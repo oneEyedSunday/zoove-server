@@ -16,6 +16,8 @@ import (
 	"zoove/util"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/zmb3/spotify"
+	"golang.org/x/oauth2"
 )
 
 type TrackToSearch struct {
@@ -66,6 +68,71 @@ func (search *TrackToSearch) HostSpotifySearchTrack() (*types.SingleTrack, error
 		return track, nil
 	}
 	return nil, nil
+}
+
+func HostSpotifyReturnAuth(authcode string) (*oauth2.Token, error) {
+	var redirectURI = os.Getenv("SPOTIFY_REDIRECT_URI")
+	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
+	spotifySecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+
+	bearer := base64.StdEncoding.EncodeToString([]byte(spotifyClientID + ":" + spotifySecret))
+
+	reqbody := url.Values{}
+	reqbody.Set("grant_type", "authorization_code")
+	reqbody.Set("code", authcode)
+	reqbody.Set("redirect_uri", redirectURI)
+
+	client := &http.Client{}
+	endpoint := fmt.Sprintf("%s/api/token", os.Getenv("SPOTIFY_AUTH_BASE"))
+	r, _ := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(reqbody.Encode()))
+
+	r.Header.Set("Authorization", "Basic "+bearer)
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Content-Length", strconv.Itoa(len(reqbody.Encode())))
+
+	resp, _ := client.Do(r)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &oauth2.Token{}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, types.UnAuthorizedScope
+	}
+
+	err = json.Unmarshal(body, res)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	log.Println(string(body))
+	return res, nil
+}
+
+func HostSpotifyUserAuth(authcode string) (*spotify.PrivateUser, error) {
+	redirecURI := os.Getenv("SPOTIFY_REDIRECT_URI")
+	token, err := HostSpotifyReturnAuth(authcode)
+	if err != nil {
+		log.Println(`Error with getting spotify token`)
+	}
+
+	log.Printf("Access token is: %s", token.AccessToken)
+	auth := spotify.NewAuthenticator(redirecURI, spotify.ScopeUserReadPrivate, spotify.ScopeUserReadEmail,
+		spotify.ScopePlaylistModifyPublic, spotify.ScopeUserLibraryModify,
+		spotify.ScopeUserTopRead, spotify.ScopeUserReadRecentlyPlayed,
+		spotify.ScopeUserReadCurrentlyPlaying,
+	)
+
+	auth.SetAuthInfo(os.Getenv("SPOTIFY_CLIENT_ID"), os.Getenv("SPOTIFY_CLIENT_SECRET"))
+	client := auth.NewClient(token)
+	user, err := client.CurrentUser()
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }
 
 func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.SingleTrack, error) {

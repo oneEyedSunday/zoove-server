@@ -27,10 +27,11 @@ func NewUserHandler(db *db.PrismaClient) *User {
 }
 
 func (user *User) AuthorizeUser(ctx *fiber.Ctx) {
+	rnid, _ := uuid.NewRandom()
+	randomid := rnid.String()
 	platform := strings.ToLower(ctx.Params("platform"))
-
+	authcode := ctx.Query("code")
 	if platform == util.HostDeezer {
-		authcode := ctx.Query("code")
 		token, err := platforms.HostDeezerUserAuth(authcode)
 		if err != nil {
 			log.Println("Error authenticating using on deezer")
@@ -45,25 +46,29 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) {
 			return
 		}
 		ctx.Locals("token", token)
+		platformid := strconv.FormatInt(profile.ID, 10)
+
+		claims := &types.Token{
+			Platform:      util.HostDeezer,
+			PlatformID:    platformid,
+			PlatformToken: token,
+			UUID:          randomid,
+		}
+
 		existing, err := user.DB.User.FindOne(db.User.Email.Equals(profile.Email)).Exec(context.Background())
 		if err != nil {
 			log.Println("Couldnot get existing user from DB")
+			log.Printf("Error is: %#v", err)
 			if err == db.ErrNotFound {
-				log.Println("User does not exist. should create now")
-				rnid, _ := uuid.NewRandom()
-				randomid := rnid.String()
-				platformid := strconv.FormatInt(profile.ID, 10)
-
-				claims := &types.Token{
-					Platform:      profile.Platform,
-					PlatformID:    platformid,
-					PlatformToken: token,
-					UUID:          randomid,
-				}
 				signedJWT, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+				out := map[string]interface{}{
+					"token": signedJWT,
+				}
+
 				if err != nil {
 					panic(err)
 				}
+				log.Println("User does not exist. should create now")
 				_, err = user.DB.User.CreateOne(
 					db.User.UpdatedAt.Set(time.Now()),
 					db.User.FullName.Set(fmt.Sprintf("%s %s", profile.FirstName, profile.LastName)),
@@ -81,11 +86,79 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) {
 					return
 				}
 
-				util.RequestCreated(ctx, signedJWT)
+				util.RequestCreated(ctx, out)
 				return
 			}
 		}
-		util.RequestOk(ctx, existing)
+		claims.UUID = existing.UUID
+		signedJWT, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+		out := map[string]interface{}{
+			"token": signedJWT,
+		}
+
+		if err != nil {
+			panic(err)
+		}
+		util.RequestOk(ctx, out)
+		return
+	} else if platform == util.HostSpotify {
+		// spotifyRedirect := os.Getenv("SPOTIFY_REDIRECT_URI")
+		spotify, err := platforms.HostSpotifyUserAuth(authcode)
+		if err != nil {
+			log.Println("Error getting user")
+			log.Println(err)
+			util.InternalServerError(ctx, err)
+			return
+		}
+		claims := &types.Token{
+			Platform:      util.HostSpotify,
+			PlatformID:    spotify.ID,
+			PlatformToken: "",
+			UUID:          randomid,
+		}
+
+		// ctx.Locals("token")
+		existing, err := user.DB.User.FindOne(db.User.Email.Equals(spotify.Email)).Exec(context.Background())
+
+		if err != nil {
+			log.Println("Error finding from the record")
+			if err == db.ErrNotFound {
+				signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+				out := map[string]string{
+					"token": signedJwt,
+				}
+
+				log.Println("User does not exist. create new")
+				_, err = user.DB.User.CreateOne(
+					db.User.UpdatedAt.Set(time.Now()),
+					db.User.FullName.Set(""),
+					db.User.FirstName.Set(""),
+					db.User.LastName.Set(""),
+					db.User.Country.Set(spotify.Country),
+					db.User.Lang.Set("en"),
+					db.User.UUID.Set(randomid),
+					db.User.Email.Set(spotify.Email),
+				).Exec(context.Background())
+
+				if err != nil {
+					log.Println("Error creating new user")
+					log.Println(err)
+					util.InternalServerError(ctx, err)
+					return
+				}
+				log.Println("Done with this now....")
+				util.RequestCreated(ctx, out)
+				return
+			}
+		}
+
+		claims.UUID = existing.UUID
+		signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+		out := map[string]string{
+			"token": signedJwt,
+		}
+
+		util.RequestOk(ctx, out)
 		return
 	}
 }

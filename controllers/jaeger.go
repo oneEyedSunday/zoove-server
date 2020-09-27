@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"log"
+	"os"
 	"zoove/errors"
 	"zoove/platforms"
 	"zoove/types"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gofiber/fiber"
 	"github.com/gomodule/redigo/redis"
+	"github.com/soveran/redisurl"
 )
 
 type Jaeger struct {
@@ -19,7 +21,8 @@ type Jaeger struct {
 func NewJaeger(pool *redis.Pool) *Jaeger {
 	pool = &redis.Pool{
 		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", "localhost:6379")
+			log.Println(os.Getenv("REDIS_URL"))
+			return redisurl.Connect()
 		},
 	}
 	return &Jaeger{Pool: pool}

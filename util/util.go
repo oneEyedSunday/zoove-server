@@ -30,22 +30,22 @@ func RequestOk(ctx *fiber.Ctx, data interface{}) {
 
 // BadRequest sends back a statusReqBad response to the client
 func BadRequest(ctx *fiber.Ctx, err error) {
-	ctx.Status(http.StatusBadRequest).Send(fiber.Map{"message": "The request you send is bad", "error": err.Error(), "status": http.StatusBadRequest, "data": nil})
+	ctx.Status(http.StatusBadRequest).JSON(fiber.Map{"message": "The request you send is bad", "error": err.Error(), "status": http.StatusBadRequest, "data": nil})
 }
 
 // RequestUnAuthorized sends back a statusUnAuthorized to the client
 func RequestUnAuthorized(ctx *fiber.Ctx, err error) {
-	ctx.Status(http.StatusUnauthorized).Send(fiber.Map{"message": "The request you made is unauthorized", "error": err.Error(), "status": http.StatusUnauthorized, "data": nil})
+	ctx.Status(http.StatusUnauthorized).JSON(fiber.Map{"message": "The request you made is unauthorized", "error": err.Error(), "status": http.StatusUnauthorized, "data": nil})
 }
 
 // RequestCreated sends back a statusCreated to the client
 func RequestCreated(ctx *fiber.Ctx, data interface{}) {
-	ctx.Status(http.StatusCreated).Send(fiber.Map{"message": "The resource has been created", "error": nil, "status": http.StatusCreated, "data": data})
+	ctx.Status(http.StatusCreated).JSON(fiber.Map{"message": "The resource has been created", "error": nil, "status": http.StatusCreated, "data": data})
 }
 
 // NotFound sends back a statusNotFound response to the client
 func NotFound(ctx *fiber.Ctx) {
-	ctx.Status(http.StatusNotFound).Send(fiber.Map{"message": "The resource does not exist", "error": nil, "status": http.StatusNotFound, "data": nil})
+	ctx.Status(http.StatusNotFound).JSON(fiber.Map{"message": "The resource does not exist", "error": nil, "status": http.StatusNotFound, "data": nil})
 }
 
 func InternalServerError(ctx *fiber.Ctx, err error) {
