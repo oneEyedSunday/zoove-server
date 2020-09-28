@@ -1,4 +1,4 @@
-name: Go
+name: Heroku Zoove deploy
 
 on:
   push:
