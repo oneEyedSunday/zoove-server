@@ -16,88 +16,136 @@ import (
 	"zoove/util"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/soveran/redisurl"
 	"github.com/zmb3/spotify"
 	"golang.org/x/oauth2"
 )
 
-type TrackToSearch struct {
-	Title   string
-	Artiste string
-	Pool    *redis.Pool
+var scopes = url.QueryEscape(fmt.Sprintf("%s %s %s %s %s %s %s", spotify.ScopeUserReadPrivate, spotify.ScopeUserReadEmail,
+	spotify.ScopePlaylistModifyPublic, spotify.ScopeUserLibraryModify,
+	spotify.ScopeUserTopRead, spotify.ScopeUserReadRecentlyPlayed,
+	spotify.ScopeUserReadCurrentlyPlaying))
+
+// HostSpotifySearchTrackChan returns a searched track using channels
+func (search *TrackToSearch) HostSpotifySearchTrackChan(ch chan *types.SingleTrack) {
+	payload := url.QueryEscape(fmt.Sprintf("track:%s artist:%s", search.Title, search.Artiste))
+	searchURL := fmt.Sprintf("%s/v1/search?q=%s&type=track", os.Getenv("SPOTIFY_API_BASE"), payload)
+	output := &types.HostSpotifySearchTrack{}
+	token, err := GetSpotifyAuthToken()
+	if err != nil {
+		// return nil, err
+		ch <- nil
+	}
+
+	err = MakeSpotifyRequest(searchURL, token.AccessToken, output)
+	if err != nil {
+		// return nil, err
+		ch <- nil
+	}
+	// log.Printf("\nOUTPUT HERE: %#v\n\n", output.Tracks)
+	if len(output.Tracks.Items) > 0 {
+
+		if len(output.Tracks.Items[0].Artists) > 0 {
+			base := output.Tracks.Items[0]
+			artistes := []string{}
+			for i := range output.Tracks.Items[0].Artists {
+				artistes = append(artistes, output.Tracks.Items[0].Artists[i].Name)
+			}
+			track := &types.SingleTrack{
+				Cover:       base.Album.Images[0].URL,
+				Duration:    base.DurationMs,
+				Explicit:    base.Explicit,
+				ID:          base.ID,
+				Platform:    util.HostSpotify,
+				Preview:     base.PreviewURL,
+				ReleaseDate: base.Album.ReleaseDate,
+				Title:       base.Name,
+				URL:         base.ExternalUrls.Spotify,
+				Artistes:    artistes,
+			}
+			// return track, nil
+			ch <- track
+			// log.Printf("TITLE OF TRACK ON SPOTIFY IS: %s", track.Title)
+			return
+		}
+	}
+	// return nil, errors.NotFound
+	ch <- nil
 }
 
-func NewTrackToSearch(title, artiste string, pool *redis.Pool) *TrackToSearch {
-	return &TrackToSearch{Artiste: artiste, Title: title, Pool: pool}
-}
-
+// HostSpotifySearchTrack returns a searched track.
 func (search *TrackToSearch) HostSpotifySearchTrack() (*types.SingleTrack, error) {
 	payload := url.QueryEscape(fmt.Sprintf("track:%s artist:%s", search.Title, search.Artiste))
 	searchURL := fmt.Sprintf("%s/v1/search?q=%s&type=track", os.Getenv("SPOTIFY_API_BASE"), payload)
 	output := &types.HostSpotifySearchTrack{}
 	token, err := GetSpotifyAuthToken()
 	if err != nil {
-		log.Println("Error authenticating spotify and returning needed tokens")
-		log.Println(err)
+		return nil, err
 	}
 
 	err = MakeSpotifyRequest(searchURL, token.AccessToken, output)
 	if err != nil {
-		log.Println("Error authorizing spotify")
-		log.Println(err)
 		return nil, err
 	}
+	// log.Printf("\nOUTPUT HERE: %#v\n\n", output.Tracks)
+	if len(output.Tracks.Items) > 0 {
 
-	if len(output.Tracks.Items[0].Artists) > 0 {
-		base := output.Tracks.Items[0]
-		artistes := []string{}
-		for i := range output.Tracks.Items[0].Artists {
-			artistes = append(artistes, output.Tracks.Items[0].Artists[i].Name)
+		if len(output.Tracks.Items[0].Artists) > 0 {
+			base := output.Tracks.Items[0]
+			artistes := []string{}
+			for i := range output.Tracks.Items[0].Artists {
+				artistes = append(artistes, output.Tracks.Items[0].Artists[i].Name)
+			}
+			track := &types.SingleTrack{
+				Cover:       base.Album.Images[0].URL,
+				Duration:    base.DurationMs,
+				Explicit:    base.Explicit,
+				ID:          base.ID,
+				Platform:    util.HostSpotify,
+				Preview:     base.PreviewURL,
+				ReleaseDate: base.Album.ReleaseDate,
+				Title:       base.Name,
+				URL:         base.ExternalUrls.Spotify,
+				Artistes:    artistes,
+			}
+			return track, nil
 		}
-		track := &types.SingleTrack{
-			Cover:       base.Album.Images[0].URL,
-			Duration:    base.DurationMs,
-			Explicit:    base.Explicit,
-			ID:          base.ID,
-			Platform:    util.HostSpotify,
-			Preview:     base.PreviewURL,
-			ReleaseDate: base.Album.ReleaseDate,
-			Title:       base.Name,
-			URL:         base.ExternalUrls.Spotify,
-			Artistes:    artistes,
-		}
-		return track, nil
 	}
-	return nil, nil
+	return nil, errors.NotFound
 }
 
+// HostSpotifyReturnAuth returns a new oauth token for spotify user. Note this is not used used for making calls that require user permission
 func HostSpotifyReturnAuth(authcode string) (*oauth2.Token, error) {
-	var redirectURI = os.Getenv("SPOTIFY_REDIRECT_URI")
+	spotifyAuthBaseURL := os.Getenv("SPOTIFY_AUTH_BASE")
+	spotifyRedirectURI := os.Getenv("SPOTIFY_REDIRECT_URI")
 	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
-	spotifySecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	spotifyClientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
 
-	bearer := base64.StdEncoding.EncodeToString([]byte(spotifyClientID + ":" + spotifySecret))
+	spotifyBearer := base64.StdEncoding.EncodeToString([]byte(spotifyClientID + ":" + spotifyClientSecret))
 
 	reqbody := url.Values{}
 	reqbody.Set("grant_type", "authorization_code")
 	reqbody.Set("code", authcode)
-	reqbody.Set("redirect_uri", redirectURI)
+	reqbody.Set("redirect_uri", spotifyRedirectURI)
 
 	client := &http.Client{}
-	endpoint := fmt.Sprintf("%s/api/token", os.Getenv("SPOTIFY_AUTH_BASE"))
+	endpoint := fmt.Sprintf("%s/api/token", spotifyAuthBaseURL)
 	r, _ := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(reqbody.Encode()))
 
-	r.Header.Set("Authorization", "Basic "+bearer)
+	r.Header.Set("Authorization", "Basic "+spotifyBearer)
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Content-Length", strconv.Itoa(len(reqbody.Encode())))
 
-	resp, _ := client.Do(r)
+	resp, err := client.Do(r)
+	if err != nil {
+		return nil, err
+	}
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
 
 	res := &oauth2.Token{}
-
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, types.UnAuthorizedScope
 	}
@@ -111,31 +159,32 @@ func HostSpotifyReturnAuth(authcode string) (*oauth2.Token, error) {
 	return res, nil
 }
 
-func HostSpotifyUserAuth(authcode string) (*spotify.PrivateUser, error) {
-	redirecURI := os.Getenv("SPOTIFY_REDIRECT_URI")
+// HostSpotifyUserAuth authorizes a user and returns the spotify user profile
+func HostSpotifyUserAuth(authcode string) (*spotify.PrivateUser, string, error) {
+	redirecURI := os.Getenv("spotifyRedirectURI")
 	token, err := HostSpotifyReturnAuth(authcode)
 	if err != nil {
-		log.Println(`Error with getting spotify token`)
+		return nil, "", err
 	}
 
-	log.Printf("Access token is: %s", token.AccessToken)
 	auth := spotify.NewAuthenticator(redirecURI, spotify.ScopeUserReadPrivate, spotify.ScopeUserReadEmail,
 		spotify.ScopePlaylistModifyPublic, spotify.ScopeUserLibraryModify,
 		spotify.ScopeUserTopRead, spotify.ScopeUserReadRecentlyPlayed,
 		spotify.ScopeUserReadCurrentlyPlaying,
 	)
 
-	auth.SetAuthInfo(os.Getenv("SPOTIFY_CLIENT_ID"), os.Getenv("SPOTIFY_CLIENT_SECRET"))
+	auth.SetAuthInfo(os.Getenv("spotifyClientID"), os.Getenv("spotifyClientSecret"))
 	client := auth.NewClient(token)
 	user, err := client.CurrentUser()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return user, nil
+	return user, token.RefreshToken, nil
 }
 
-func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.SingleTrack, error) {
+// HostSpotifyGetSingleTrack returns a single (cached) spotify track but using a channel
+func HostSpotifyGetSingleTrackChan(spotifyID string, pool *redis.Pool, ch chan *types.SingleTrack) {
 	conn := pool.Get()
 	defer conn.Close()
 	key := fmt.Sprintf("%s-%s", "spotify", spotifyID)
@@ -143,21 +192,15 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 	if err != nil {
 		log.Println("Error getting single track")
 		if err == redis.ErrNil {
-			// payload := fmt.Sprintf("track:%s artist:%s")
-			// escaped := url.QueryEscape(payload)
-			// token := &types.HostSpotifyAuthResponse{}
 			tokens, err := GetSpotifyAuthToken()
-			log.Printf("Spotify auth response is: %#v", tokens)
 			if err != nil {
-				log.Println("Error getting the spotify token")
-				log.Println(err)
-				return nil, err
+				// return nil, err
+				ch <- nil
 			}
 
 			sptf := &types.HostSpotifyTrack{}
-			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID), tokens.AccessToken, sptf)
-			log.Printf("ody")
-			log.Printf("SPOTIFY SEARCH IS: %#v", sptf)
+			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("spotifyApiBase"), spotifyID), tokens.AccessToken, sptf)
+
 			single := &types.SingleTrack{
 				Cover:       sptf.Album.Images[0].URL,
 				Duration:    sptf.DurationMs,
@@ -175,12 +218,73 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 
 			serialize, err := json.Marshal(single)
 			if err != nil {
-				log.Println("Error serializing for saving into the DB")
+				// return nil, err
+				ch <- nil
+			}
+			_, err = redis.String(conn.Do("SET", key, string(serialize)))
+			if err != nil {
+				// just log. not handling this error as its none crucial. users dont care it doesnt impact them
+				log.Println("Error inserting into redis")
+				log.Println(err)
+			}
+			// return single, err
+			ch <- single
+			return
+		}
+	}
+
+	single := &types.SingleTrack{}
+	err = json.Unmarshal([]byte(values), single)
+	if err != nil {
+		// return nil, err
+		ch <- nil
+		return
+	}
+
+	ch <- single
+}
+
+// HostSpotifyGetSingleTrack returns a single (cached) spotify track
+func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.SingleTrack, error) {
+	conn := pool.Get()
+	defer conn.Close()
+	key := fmt.Sprintf("%s-%s", "spotify", spotifyID)
+	values, err := redis.String(conn.Do("GET", key))
+	if err != nil {
+		log.Println("Error getting single track")
+		if err == redis.ErrNil {
+			tokens, err := GetSpotifyAuthToken()
+			if err != nil {
+				return nil, err
+			}
+
+			sptf := &types.HostSpotifyTrack{}
+			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("spotifyApiBase"), spotifyID), tokens.AccessToken, sptf)
+
+			single := &types.SingleTrack{
+				Cover:       sptf.Album.Images[0].URL,
+				Duration:    sptf.DurationMs,
+				Explicit:    sptf.Explicit,
+				ID:          sptf.ID,
+				Platform:    util.HostSpotify,
+				Preview:     sptf.PreviewURL,
+				ReleaseDate: sptf.Album.ReleaseDate,
+				Title:       sptf.Name,
+				URL:         sptf.ExternalUrls.Spotify,
+			}
+			for _, elem := range sptf.Artists {
+				single.Artistes = append(single.Artistes, elem.Name)
+			}
+
+			serialize, err := json.Marshal(single)
+			if err != nil {
 				return nil, err
 			}
 			_, err = redis.String(conn.Do("SET", key, string(serialize)))
 			if err != nil {
+				// just log. not handling this error as its none crucial. users dont care it doesnt impact them
 				log.Println("Error inserting into redis")
+				log.Println(err)
 			}
 			return single, err
 		}
@@ -189,31 +293,106 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 	single := &types.SingleTrack{}
 	err = json.Unmarshal([]byte(values), single)
 	if err != nil {
-		log.Println("Error deserializing the cached value")
-		log.Println(err)
 		return nil, err
 	}
 
 	return single, nil
 }
 
-func GetSpotifyAuthToken() (*types.HostSpotifyAuthResponse, error) {
+// HostSpotifyListeningHistory returns the listening history for a spotify user
+func HostSpotifyListeningHistory(refreshToken string) ([]types.SingleTrack, error) {
+	spotifyAPIBase := os.Getenv("SPOTIFY_API_BASE")
+	accessToken, err := HostSpotifyGetAuthorizedAcessToken(refreshToken)
+	if err != nil {
+		return nil, err
+	}
 
+	url := fmt.Sprintf("%s/v1/me/player/recently-played", spotifyAPIBase)
+	history := &types.HostSpotifyHistory{}
+	err = MakeSpotifyRequest(url, accessToken.AccessToken, history)
+	if err != nil {
+		// log.Printf("Error making request to the listening history: %s", err)
+		return nil, err
+	}
+
+	hist := []types.SingleTrack{}
+	for _, h := range history.Items {
+		base := h.Track.Album
+		img := ""
+		if len(base.Images) > 0 {
+			img = base.Images[0].URL
+		}
+		artistes := []string{}
+		for _, k := range h.Track.Artists {
+			artistes = append(artistes, k.Name)
+		}
+
+		track := types.SingleTrack{Cover: img, Artistes: artistes, Duration: h.Track.DurationMs,
+			Explicit: h.Track.Explicit, ID: h.Track.ID, Platform: util.HostSpotify, Preview: h.Track.PreviewURL,
+			ReleaseDate: h.Track.Album.ReleaseDate, Title: h.Track.Name, URL: h.Track.ExternalUrls.Spotify, PlayedAt: h.PlayedAt.String(),
+		}
+		hist = append(hist, track)
+	}
+
+	return hist, nil
+}
+
+// HostSpotifyGetAuthorizedAcessToken returns a user authorized token. this is different from GetSpotifyAuthToken because this one can be
+// used for user authorization required actions (for example, getting play history).
+// Use this only when you need to make calls that require user access. this is because it has lower rate limit.
+func HostSpotifyGetAuthorizedAcessToken(refreshToken string) (*types.HostSpotifyAcessTokenRefreshResponse, error) {
+	spotifyAuthBaseURL := os.Getenv("SPOTIFY_AUTH_BASE")
 	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
-	spotifySecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	spotifyClientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	spotifyBearer := base64.StdEncoding.EncodeToString([]byte(spotifyClientID + ":" + spotifyClientSecret))
+
+	reqBody := url.Values{}
+	client := &http.Client{}
+	url := fmt.Sprintf("%s/api/token", spotifyAuthBaseURL)
+	reqBody.Set("grant_type", "refresh_token")
+	reqBody.Set("refresh_token", refreshToken)
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(reqBody.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Basic "+spotifyBearer)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Length", strconv.Itoa(len(reqBody.Encode())))
+	doRequest, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	body, err := ioutil.ReadAll(doRequest.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer doRequest.Body.Close()
+	authRes := &types.HostSpotifyAcessTokenRefreshResponse{}
+	err = json.Unmarshal(body, authRes)
+	if err != nil {
+		return nil, err
+	}
+	return authRes, nil
+}
+
+// GetSpotifyAuthToken returns a normal spotify oauth token for a us. this token is used for things that dont require user permission or scopes
+func GetSpotifyAuthToken() (*oauth2.Token, error) {
+	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
+	spotifyClientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	spotifyBearer := base64.StdEncoding.EncodeToString([]byte(spotifyClientID + ":" + spotifyClientSecret))
+
+	spotifyAuthBaseURL := os.Getenv("SPOTIFY_AUTH_BASE")
 	reqBody := url.Values{}
 	reqBody.Set("grant_type", "client_credentials")
 
 	client := &http.Client{}
-	url := fmt.Sprintf("%s/api/token", os.Getenv("SPOTIFY_AUTH_BASE"))
+	url := fmt.Sprintf("%s/api/token", spotifyAuthBaseURL)
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(reqBody.Encode()))
 	if err != nil {
 		log.Fatalf("Error with spotify auth")
 	}
 
-	bearer := base64.StdEncoding.EncodeToString([]byte(spotifyClientID + ":" + spotifySecret))
-
-	req.Header.Set("Authorization", "Basic "+bearer)
+	req.Header.Set("Authorization", "Basic "+spotifyBearer)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Content-Length", strconv.Itoa(len(reqBody.Encode())))
 	doRequest, err := client.Do(req)
@@ -227,11 +406,10 @@ func GetSpotifyAuthToken() (*types.HostSpotifyAuthResponse, error) {
 	}
 
 	defer doRequest.Body.Close()
-	out := &types.HostSpotifyAuthResponse{}
+	out := &oauth2.Token{}
 
 	err = json.Unmarshal(body, out)
 	if err != nil {
-		log.Println(err)
 		return nil, err
 	}
 
@@ -239,13 +417,108 @@ func GetSpotifyAuthToken() (*types.HostSpotifyAuthResponse, error) {
 
 }
 
+// HostSpotifyFetchArtisteHistory returns the artistes user has listened to recently
+func HostSpotifyFetchArtisteHistory(token string) ([]string, error) {
+	hist, err := HostSpotifyListeningHistory(token)
+	if err != nil {
+		return nil, err
+	}
+
+	history := []string{}
+	for _, track := range hist {
+		history = append(history, track.Artistes...)
+	}
+	return history, nil
+}
+
+// HostSpotifyFetchPlaylistTracks returns a cached spotify playlist
+func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.Playlist, error) {
+	log.Printf("PLAYLIST IS %s\n", playlistID)
+	pool = &redis.Pool{
+		Dial: func() (redis.Conn, error) {
+			// log.Println(os.Getenv("REDIS_URL"))
+			return redisurl.Connect()
+		},
+	}
+	// spotifyPlaylist := &spotify.FullPlaylist{}
+	tok, err := GetSpotifyAuthToken()
+	if err != nil {
+		return types.Playlist{}, err
+	}
+	log.Printf("\nReturned token: %#v", tok.AccessToken)
+
+	conn := pool.Get()
+	defer conn.Close()
+	key := fmt.Sprintf("playlist-%s-%s", util.HostSpotify, playlistID)
+	auth := spotify.NewAuthenticator(os.Getenv("SPOTIFY_REDIRECT_URI"), scopes)
+	cached, err := redis.String(conn.Do("GET", key))
+	log.Printf("Cached gotten from redis is: %sjkjxcjxkcjxkcj", cached)
+	if err == nil || cached == "" {
+		log.Println("dlmdkjfdkfjdkfj")
+		if err == redis.ErrNil {
+			client := auth.NewClient(tok)
+			spotifyPlaylist, err := client.GetPlaylist(spotify.ID(playlistID))
+			if err != nil {
+				return types.Playlist{}, err
+			}
+			durationMs := 0
+			avatar := ""
+			if len(spotifyPlaylist.Owner.Images) > 0 {
+				avatar = spotifyPlaylist.Owner.Images[0].URL
+			}
+			playlist := types.Playlist{Description: spotifyPlaylist.Description,
+				Collaborative: spotifyPlaylist.Collaborative,
+				Owner:         types.PlaylistOwner{Avatar: avatar, ID: spotifyPlaylist.Owner.ID, Name: spotifyPlaylist.Name},
+			}
+			for _, single := range spotifyPlaylist.Tracks.Tracks {
+				durationMs += single.Track.Duration
+				singleT := &types.SingleTrack{
+					AddedAt:     single.AddedAt,
+					Cover:       single.Track.Album.Images[0].URL,
+					Duration:    single.Track.Duration,
+					Explicit:    single.Track.Explicit,
+					ID:          single.Track.ID.String(),
+					Platform:    util.HostSpotify,
+					Title:       single.Track.Name,
+					URL:         single.Track.Endpoint,
+					ReleaseDate: single.Track.Album.ReleaseDate,
+					Preview:     single.Track.PreviewURL,
+				}
+				for _, r := range single.Track.Artists {
+					singleT.Artistes = append(singleT.Artistes, r.Name)
+				}
+				playlist.Tracks = append(playlist.Tracks, *singleT)
+			}
+			playlist.Duration = durationMs
+			// log.Printf("Playlist is: %#v", playlist)
+			serialized, err := json.Marshal(playlist)
+			if err != nil {
+				return types.Playlist{}, nil
+			}
+			_, err = redis.String(conn.Do("SET", key, string(serialized)))
+			if err != nil {
+				return types.Playlist{}, nil
+			}
+			return playlist, nil
+		}
+	}
+	playlist := &types.Playlist{}
+	err = json.Unmarshal([]byte(cached), playlist)
+	if err != nil {
+		return types.Playlist{}, nil
+	}
+
+	// log.Printf("Here is the playlist: %#v\n\n", playlist)
+	return *playlist, err
+}
+
+// MakeSpotifyRequest makes a spotify API call
 func MakeSpotifyRequest(url, token string, out interface{}) error {
 	// log.Printf("URL is: %s", url)
 	// log.Printf("Token is: %s", token)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	if err != nil {
-		log.Println("Error making request to the URL")
 		return err
 	}
 
@@ -253,14 +526,10 @@ func MakeSpotifyRequest(url, token string, out interface{}) error {
 	res, err := client.Do(req)
 
 	if err != nil {
-		log.Println("Error making HTTP request")
-		log.Println(err)
 		return err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		log.Println("Error reading response body")
-		log.Println(err)
 		return err
 	}
 	defer res.Body.Close()

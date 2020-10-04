@@ -19,4 +19,9 @@ model User {
   lang      String
   uuid      String   @unique
   email     String   @unique
+  username  String   @unique
+  platform  String
+  avatar    String
+  token     String
+  plan      String
 }

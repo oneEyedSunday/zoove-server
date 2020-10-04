@@ -12,22 +12,21 @@ import (
 	"zoove/types"
 
 	"github.com/dgrijalva/jwt-go"
-	"github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/v2"
 )
 
-func ExtractInfoMetadata(ctx *fiber.Ctx) {
+func ExtractInfoMetadata(ctx *fiber.Ctx) error {
 	rawURL := ctx.Query("track")
 	song, err := url.QueryUnescape(rawURL)
 
 	if err != nil {
 		log.Println("Error escaping URL")
-		ctx.Next(err)
+		return ctx.Next()
 	}
 	parsedURL, err := url.Parse(song)
 	if err != nil {
 		log.Println("Error parsing URL")
-		ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{"message": "Error getting parsing the URL", "error": err.Error()})
-		return
+		return ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{"message": "Error getting parsing the URL", "error": err.Error()})
 	}
 
 	platformHost := parsedURL.Host
@@ -44,26 +43,42 @@ func ExtractInfoMetadata(ctx *fiber.Ctx) {
 	// the below code simply uses the url from A and turn it into B
 
 	if platformHost == "www.deezer.com" {
-		deezerID := sub[32:]
+		// find index of playlist
+		playlistIndex := strings.Index(sub, "playlist")
+		deezerID := ""
+		if playlistIndex != -1 {
+			deezerID = sub[playlistIndex+9:]
+		} else {
+			deezerID = sub[32:]
+		}
 		midd.Host = "deezer"
 		midd.URL = fmt.Sprintf("%s/track/%s", os.Getenv("DEEZER_API_BASE"), deezerID)
 		midd.ID = deezerID
 	} else if platformHost == "open.spotify.com" {
-		spotifyID := sub[31:]
+		// log.Println("Its spotify...")
+		// log.Printf("Sub: %s", sub)
+		playlistIndex := strings.Index(sub, "playlist")
+		spotifyID := ""
+		if playlistIndex != -1 {
+			spotifyID = sub[34:]
+		} else {
+			spotifyID = sub[34:]
+		}
+
 		midd.Host = "spotify"
 		midd.URL = fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID)
 		midd.ID = spotifyID
 	}
 
 	ctx.Locals("extractedInfo", midd)
-	ctx.Next()
+	return ctx.Next()
 }
 
 type AuthenticateMiddleware struct {
 	DB *db.PrismaClient
 }
 
-func (auth *AuthenticateMiddleware) AuthenticateUser(ctx *fiber.Ctx) {
+func (auth *AuthenticateMiddleware) AuthenticateUser(ctx *fiber.Ctx) error {
 	ten := ctx.Locals("user").(*jwt.Token)
 	claims := ten.Claims.(*types.Token)
 	ccx := context.TODO()
@@ -71,13 +86,12 @@ func (auth *AuthenticateMiddleware) AuthenticateUser(ctx *fiber.Ctx) {
 	if err != nil {
 		if err == db.ErrNotFound {
 			log.Println("User with that UUID doesnt exist")
-			ctx.Status(http.StatusNotFound).JSON(fiber.Map{"message": "User not found", "error": err})
-			return
+			return ctx.Status(http.StatusNotFound).JSON(fiber.Map{"message": "User not found", "error": err})
 		}
 	}
 
 	ctx.Locals("uuid", user.UUID)
-	ctx.Next()
+	return ctx.Next()
 }
 
 func NewAuthUserMiddleware(db *db.PrismaClient) *AuthenticateMiddleware {

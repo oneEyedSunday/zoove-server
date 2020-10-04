@@ -2,13 +2,12 @@ package controllers
 
 import (
 	"log"
-	"os"
 	"zoove/errors"
 	"zoove/platforms"
 	"zoove/types"
 	"zoove/util"
 
-	"github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/v2"
 	"github.com/gomodule/redigo/redis"
 	"github.com/soveran/redisurl"
 )
@@ -21,7 +20,7 @@ type Jaeger struct {
 func NewJaeger(pool *redis.Pool) *Jaeger {
 	pool = &redis.Pool{
 		Dial: func() (redis.Conn, error) {
-			log.Println(os.Getenv("REDIS_URL"))
+			// log.Println(os.Getenv("REDIS_URL"))
 			return redisurl.Connect()
 		},
 	}
@@ -29,7 +28,7 @@ func NewJaeger(pool *redis.Pool) *Jaeger {
 }
 
 // JaegerHandler is the handler for finding tracks on other platforms from one. Using Jaeger for loss of words lol
-func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) {
+func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 	extracted := ctx.Locals("extractedInfo").(*types.ExtractedInfo)
 
 	// lets say that user pastes deezer link. The extractedInfo would be:
@@ -58,13 +57,15 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) {
 			log.Println(err)
 			if err == errors.NotFound {
 				log.Println("Track does not exist on deezer")
-				util.NotFound(ctx)
-				return
+				return util.NotFound(ctx)
 			}
 		}
 		search := platforms.NewTrackToSearch(track.Title, track.Artistes[0], jaeger.Pool)
 		spot, err := search.HostSpotifySearchTrack()
 		if err != nil {
+			if err == errors.NotFound {
+				spot = nil
+			}
 			log.Println("Error fetching spotify search")
 			log.Println(err)
 		}
@@ -77,8 +78,7 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) {
 			log.Println(err)
 			if err == errors.NotFound {
 				log.Println("Track does not exist on spotify")
-				util.NotFound(ctx)
-				return
+				return util.NotFound(ctx)
 			}
 		}
 		search := platforms.NewTrackToSearch(track.Title, track.Artistes[0], jaeger.Pool)
@@ -118,6 +118,65 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) {
 	}
 
 	log.Printf("Searches count is: %d", searchesCount)
-	util.RequestOk(ctx, tracks)
-	return
+	return util.RequestOk(ctx, tracks)
 }
+
+// ConvertPlaylist retrieves tracks found for a playlist and returns the equivalents of the playlist tracks from other platforms.
+func (jaeger *Jaeger) ConvertPlaylist(ctx *fiber.Ctx) error {
+	// lets say someone pasted a spotify URL,
+	/**
+	FIRST, we want to get the tracks on that playlist.
+	Second, then check through cache and see if that song has been cached.
+	Third, if cached, then build an array of JSON, each JSON object being songs for the playlist found for other platforms
+	**/
+
+	extracted := ctx.Locals("extractedInfo").(*types.ExtractedInfo)
+	log.Printf("Extracted issues: %#v", extracted)
+
+	playlist := &types.Playlist{}
+	if extracted.Host == util.HostDeezer {
+		deezerPlaylist, err := platforms.HostDeezerFetchPlaylistTracks(extracted.ID, jaeger.Pool)
+		if err != nil {
+			log.Printf("Error getting user playlist: %s", err.Error())
+			util.InternalServerError(ctx, err)
+		}
+		playlist = &deezerPlaylist
+	} else if extracted.Host == util.HostSpotify {
+		spotifyPlaylist, err := platforms.HostSpotifyFetchPlaylistTracks(extracted.ID, jaeger.Pool)
+		if err != nil {
+			log.Printf("Error getting spotify playlist: %s", err.Error())
+			return util.InternalServerError(ctx, err)
+		}
+		// log.Printf("\nFetched playlist is: %#v\n", spotifyPlaylist)
+		playlist = &spotifyPlaylist
+	}
+
+	outputs := [][]types.SingleTrack{}
+	deezerPlaylist := []types.SingleTrack{}
+	spotifPlaylist := []types.SingleTrack{}
+	spotChan := make(chan *types.SingleTrack)
+	deezChan := make(chan *types.SingleTrack)
+
+	for _, singleTrack := range playlist.Tracks {
+		search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], jaeger.Pool)
+		go search.HostDeezerSearchTrackChan(deezChan)
+		deezerTrack := <-deezChan
+		if deezerTrack == nil {
+			continue
+		}
+		go search.HostSpotifySearchTrackChan(spotChan)
+		spotifyTrack := <-spotChan
+
+		if spotifyTrack == nil {
+			continue
+		}
+
+		deezerPlaylist = append(deezerPlaylist, *deezerTrack)
+		spotifPlaylist = append(spotifPlaylist, *spotifyTrack)
+	}
+	outputs = append(outputs, deezerPlaylist)
+	outputs = append(outputs, spotifPlaylist)
+	return util.RequestOk(ctx, outputs)
+}
+
+// now that we have the playlist for each, we want to look for the equivalent for each track
