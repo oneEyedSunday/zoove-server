@@ -51,9 +51,9 @@ type SocketMessage struct {
 func loadListeners() {
 	for {
 		select {
-		case _ = <-register:
-			// log.Println("New client connected..")
+		case <-register:
 		}
+
 	}
 }
 
@@ -111,15 +111,16 @@ func main() {
 		var tracks = [][]types.SingleTrack{}
 		var deezerTracks = []types.SingleTrack{}
 		var spotifyTracks = []types.SingleTrack{}
+		// ticker := time.NewTimer(10 * time.Second)
+		pool = &redis.Pool{
+			Dial: func() (redis.Conn, error) {
+				// log.Println(os.Getenv("REDIS_URL"))
+				return redisurl.Connect()
+			},
+		}
 
 		register <- c
 		for {
-			pool = &redis.Pool{
-				Dial: func() (redis.Conn, error) {
-					// log.Println(os.Getenv("REDIS_URL"))
-					return redisurl.Connect()
-				},
-			}
 			_, msg, err := c.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
@@ -207,7 +208,7 @@ func main() {
 				deezerTracks = nil
 				spotifyTracks = nil
 				c.Close()
-			} else {
+			} else if deserialize.Type == "playlist" {
 				extracted, err := util.ExtractInfoMetadata(deserialize.URL)
 				if err != nil {
 					log.Println("Error extracting")
@@ -273,8 +274,17 @@ func main() {
 				spotifyTracks = nil
 				tracks = nil
 				c.Close()
+			} else {
+				log.Println("Client just pinged for healthcheck")
+				c.Close()
 			}
-
+			// select {
+			// case <-ticker.C:
+			// 	err := c.WriteJSON(`{"type":"ping"}`)
+			// 	if err != nil {
+			// 		log.Println("Error pinging client")
+			// 	}
+			// }
 		}
 	}))
 
