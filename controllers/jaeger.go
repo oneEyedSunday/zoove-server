@@ -49,7 +49,10 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 	==> If deezer is empty, return 404 but dont trigger other platforms
 	**/
 
-	var tracks = []*types.SingleTrack{}
+	var tracks = [][]types.SingleTrack{}
+	deezerTracks := []types.SingleTrack{}
+	spotifyTracks := []types.SingleTrack{}
+
 	if extracted.Host == util.HostDeezer {
 		track, err := platforms.HostDeezerGetSingleTrack(extracted.ID, jaeger.Pool)
 		if err != nil {
@@ -70,7 +73,9 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 			log.Println(err)
 		}
 		track.ReleaseDate = spot.ReleaseDate
-		tracks = append(tracks, track, spot)
+		deezerTracks = append(deezerTracks, *track)
+		spotifyTracks = append(spotifyTracks, *spot)
+		// tracks = append(tracks, track, spot)
 	} else if extracted.Host == util.HostSpotify {
 		track, err := platforms.HostSpotifyGetSingleTrack(extracted.ID, jaeger.Pool)
 		if err != nil {
@@ -92,7 +97,9 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 		// right now. and thats what we need. but since relasedate real value can be gotten here, simply
 		// using the value here.
 		deez.ReleaseDate = track.ReleaseDate
-		tracks = append(tracks, track, deez)
+		// tracks = append(tracks, track, deez)
+		deezerTracks = append(deezerTracks, *deez)
+		spotifyTracks = append(spotifyTracks, *track)
 	}
 
 	conn := jaeger.Pool.Get()
@@ -117,6 +124,7 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 		log.Println(err)
 	}
 
+	tracks = append(tracks, deezerTracks, spotifyTracks)
 	log.Printf("Searches count is: %d", searchesCount)
 	return util.RequestOk(ctx, tracks)
 }
@@ -131,7 +139,7 @@ func (jaeger *Jaeger) ConvertPlaylist(ctx *fiber.Ctx) error {
 	**/
 
 	extracted := ctx.Locals("extractedInfo").(*types.ExtractedInfo)
-	log.Printf("Extracted issues: %#v", extracted)
+	// log.Printf("Extracted issues: %#v", extracted)
 
 	playlist := &types.Playlist{}
 	if extracted.Host == util.HostDeezer {

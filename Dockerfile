@@ -17,6 +17,7 @@ ENV SPOTIFY_CLIENT_SECRET=54da6c3422de4870bda7cb0689214c6c
 ENV SPOTIFY_REDIRECT_URI=https://4bb4df9ecc0f.ngrok.io/spotify/oauth
 ENV SPOTIFY_API_BASE=https://api.spotify.com
 ENV SPOTIFY_AUTH_BASE=https://accounts.spotify.com
+RUN go run github.com/prisma/prisma-client-go prefetch
 RUN go run github.com/prisma/prisma-client-go generate
 RUN go run github.com/prisma/prisma-client-go migrate up --experimental
 RUN go run github.com/prisma/prisma-client-go migrate save --experimental --create-db --name "prod"

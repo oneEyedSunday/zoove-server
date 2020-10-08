@@ -371,49 +371,30 @@ func HostDeezerFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.P
 	deezerBaseAPI := os.Getenv("DEEZER_API_BASE")
 	url := fmt.Sprintf("%s/playlist/%s", deezerBaseAPI, playlistID)
 
-	// check if its already cached
-	key := fmt.Sprintf("playlist-%s-%s", util.HostDeezer, playlistID)
-	cached, err := redis.String(conn.Do("GET", key))
-	if err != nil || cached == "" {
-		if err == redis.ErrNil {
-			log.Println("Not cached... will cache now.")
-			err = MakeDeezerRequest(url, deezerPlaylist)
-			if err != nil {
-				return types.Playlist{}, err
-			}
-			id := strconv.Itoa(deezerPlaylist.ID)
-			playlist := &types.Playlist{Description: deezerPlaylist.Description, Collaborative: deezerPlaylist.Collaborative,
-				Duration: deezerPlaylist.Duration, TracksNumber: deezerPlaylist.NbTracks, Title: deezerPlaylist.Title,
-				Tracks: []types.SingleTrack{}, Owner: types.PlaylistOwner{Avatar: deezerPlaylist.Picture, ID: id, Name: deezerPlaylist.Creator.Name},
-			}
-			for _, track := range deezerPlaylist.Tracks.Data {
-				dur := strconv.Itoa(track.Duration)
-				trackDuration, _ := strconv.ParseInt(dur, 10, 64)
-				timeAdded := time.Unix(int64(track.TimeAdd), 0)
-				tID := strconv.Itoa(track.ID)
-				single := &types.SingleTrack{Cover: track.Album.Cover, Artistes: []string{track.Artist.Name}, Duration: int(trackDuration) * 1000, Explicit: track.ExplicitLyrics,
-					ID: tID, Platform: util.HostDeezer, Preview: track.Preview, Title: track.Title, AddedAt: timeAdded.String(),
-					URL: track.Link,
-				}
-				playlist.Tracks = append(playlist.Tracks, *single)
-			}
-
-			serialized, err := json.Marshal(*playlist)
-			if err != nil {
-				return types.Playlist{}, err
-			}
-
-			_, err = redis.String(conn.Do("SET", key, string(serialized)))
-			log.Printf("Playlist is: %#v", playlist)
-			return *playlist, nil
-		}
+	err := MakeDeezerRequest(url, deezerPlaylist)
+	if err != nil {
 		return types.Playlist{}, err
 	}
-	playlist := &types.Playlist{}
-	err = json.Unmarshal([]byte(cached), playlist)
+	id := strconv.Itoa(deezerPlaylist.ID)
+	playlist := &types.Playlist{Description: deezerPlaylist.Description, Collaborative: deezerPlaylist.Collaborative,
+		Duration: deezerPlaylist.Duration, TracksNumber: deezerPlaylist.NbTracks, Title: deezerPlaylist.Title,
+		Tracks: []types.SingleTrack{}, Owner: types.PlaylistOwner{Avatar: deezerPlaylist.Picture, ID: id, Name: deezerPlaylist.Creator.Name},
+	}
+	for _, track := range deezerPlaylist.Tracks.Data {
+		dur := strconv.Itoa(track.Duration)
+		trackDuration, _ := strconv.ParseInt(dur, 10, 64)
+		timeAdded := time.Unix(int64(track.TimeAdd), 0)
+		tID := strconv.Itoa(track.ID)
+		single := &types.SingleTrack{Cover: track.Album.Cover, Artistes: []string{track.Artist.Name}, Duration: int(trackDuration) * 1000, Explicit: track.ExplicitLyrics,
+			ID: tID, Platform: util.HostDeezer, Preview: track.Preview, Title: track.Title, AddedAt: timeAdded.String(),
+			URL: track.Link,
+		}
+		playlist.Tracks = append(playlist.Tracks, *single)
+	}
 
 	if err != nil {
 		return types.Playlist{}, err
 	}
+	// log.Printf("Playlist is: %#v", playlist)
 	return *playlist, nil
 }

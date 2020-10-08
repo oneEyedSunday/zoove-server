@@ -2,8 +2,12 @@ package util
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
+	"strings"
 	"time"
 	"zoove/types"
 
@@ -116,6 +120,69 @@ func ParseJwtToken(value, secret string) (*types.Token, error) {
 		return nil, errors.New("malformed or invalid authorization token")
 	}
 	return tk, nil
+}
+
+func ExtractInfoMetadata(rawURL string) (*types.ExtractedInfo, error) {
+	// rawURL := ctx.Query("track")
+	song, err := url.QueryUnescape(rawURL)
+
+	if err != nil {
+		log.Println("Error escaping URL")
+		return nil, err
+	}
+	parsedURL, err := url.Parse(song)
+	if err != nil {
+		log.Println("Error parsing URL")
+		return nil, err
+		// return ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{"message": "Error getting parsing the URL", "error": err.Error()})
+	}
+
+	platformHost := parsedURL.Host
+	index := strings.Index(song, "?")
+	sub := ""
+	if index == -1 {
+		sub = song
+	} else {
+		sub = song[:index]
+	}
+	extracted := &types.ExtractedInfo{}
+	// for deezer, a song is typically like this:A, https://www.deezer.com/en/track/545820622. but to
+	// use the API to get song info, its like this:B, https://api.deezer.com/track/3135556.
+	// the below code simply uses the url from A and turn it into B
+
+	if platformHost == "www.deezer.com" {
+		// find index of playlist
+		playlistIndex := strings.Index(sub, "playlist")
+		deezerID := ""
+		queryType := "track"
+		if playlistIndex != -1 {
+			deezerID = sub[playlistIndex+9:]
+			queryType = "playlist"
+		} else {
+			trackIndex := strings.Index(sub, "track")
+			deezerID = sub[trackIndex+6:]
+		}
+		extracted.Host = "deezer"
+		extracted.URL = fmt.Sprintf("%s/track/%s", os.Getenv("DEEZER_API_BASE"), deezerID)
+		extracted.ID = deezerID
+		extracted.Type = queryType
+	} else if platformHost == "open.spotify.com" {
+		playlistIndex := strings.Index(sub, "playlist")
+		spotifyID := ""
+		queryType := "track"
+		if playlistIndex != -1 {
+			spotifyID = sub[34:]
+			queryType = "playlist"
+		} else {
+			spotifyID = sub[31:]
+		}
+
+		extracted.Host = "spotify"
+		extracted.URL = fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID)
+		extracted.ID = spotifyID
+		extracted.Type = queryType
+	}
+	return extracted, nil
 }
 
 // EncryptRefreshToken encrypts a refreshToken for a user

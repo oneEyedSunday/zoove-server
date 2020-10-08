@@ -176,6 +176,7 @@ type ExtractedInfo struct {
 	Host string
 	URL  string
 	ID   string
+	Type string
 }
 
 type TrackToSearch struct {

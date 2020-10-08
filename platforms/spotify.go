@@ -259,8 +259,8 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 			}
 
 			sptf := &types.HostSpotifyTrack{}
-			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("spotifyApiBase"), spotifyID), tokens.AccessToken, sptf)
-
+			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID), tokens.AccessToken, sptf)
+			log.Printf("Searched is: %#v\n", sptf)
 			single := &types.SingleTrack{
 				Cover:       sptf.Album.Images[0].URL,
 				Duration:    sptf.DurationMs,
@@ -433,83 +433,66 @@ func HostSpotifyFetchArtisteHistory(token string) ([]string, error) {
 
 // HostSpotifyFetchPlaylistTracks returns a cached spotify playlist
 func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.Playlist, error) {
-	log.Printf("PLAYLIST IS %s\n", playlistID)
+	// log.Printf("PLAYLIST IS %s\n", playlistID)
 	pool = &redis.Pool{
 		Dial: func() (redis.Conn, error) {
 			// log.Println(os.Getenv("REDIS_URL"))
 			return redisurl.Connect()
 		},
 	}
-	// spotifyPlaylist := &spotify.FullPlaylist{}
+
 	tok, err := GetSpotifyAuthToken()
 	if err != nil {
 		return types.Playlist{}, err
 	}
-	log.Printf("\nReturned token: %#v", tok.AccessToken)
+	// log.Printf("\nReturned token: %#v", tok.AccessToken)
 
 	conn := pool.Get()
 	defer conn.Close()
-	key := fmt.Sprintf("playlist-%s-%s", util.HostSpotify, playlistID)
+
 	auth := spotify.NewAuthenticator(os.Getenv("SPOTIFY_REDIRECT_URI"), scopes)
-	cached, err := redis.String(conn.Do("GET", key))
-	log.Printf("Cached gotten from redis is: %sjkjxcjxkcjxkcj", cached)
-	if err == nil || cached == "" {
-		log.Println("dlmdkjfdkfjdkfj")
-		if err == redis.ErrNil {
-			client := auth.NewClient(tok)
-			spotifyPlaylist, err := client.GetPlaylist(spotify.ID(playlistID))
-			if err != nil {
-				return types.Playlist{}, err
-			}
-			durationMs := 0
-			avatar := ""
-			if len(spotifyPlaylist.Owner.Images) > 0 {
-				avatar = spotifyPlaylist.Owner.Images[0].URL
-			}
-			playlist := types.Playlist{Description: spotifyPlaylist.Description,
-				Collaborative: spotifyPlaylist.Collaborative,
-				Owner:         types.PlaylistOwner{Avatar: avatar, ID: spotifyPlaylist.Owner.ID, Name: spotifyPlaylist.Name},
-			}
-			for _, single := range spotifyPlaylist.Tracks.Tracks {
-				durationMs += single.Track.Duration
-				singleT := &types.SingleTrack{
-					AddedAt:     single.AddedAt,
-					Cover:       single.Track.Album.Images[0].URL,
-					Duration:    single.Track.Duration,
-					Explicit:    single.Track.Explicit,
-					ID:          single.Track.ID.String(),
-					Platform:    util.HostSpotify,
-					Title:       single.Track.Name,
-					URL:         single.Track.Endpoint,
-					ReleaseDate: single.Track.Album.ReleaseDate,
-					Preview:     single.Track.PreviewURL,
-				}
-				for _, r := range single.Track.Artists {
-					singleT.Artistes = append(singleT.Artistes, r.Name)
-				}
-				playlist.Tracks = append(playlist.Tracks, *singleT)
-			}
-			playlist.Duration = durationMs
-			// log.Printf("Playlist is: %#v", playlist)
-			serialized, err := json.Marshal(playlist)
-			if err != nil {
-				return types.Playlist{}, nil
-			}
-			_, err = redis.String(conn.Do("SET", key, string(serialized)))
-			if err != nil {
-				return types.Playlist{}, nil
-			}
-			return playlist, nil
-		}
+	client := auth.NewClient(tok)
+	spotifyPlaylist, err := client.GetPlaylist(spotify.ID(playlistID))
+	if err != nil {
+		return types.Playlist{}, err
 	}
-	playlist := &types.Playlist{}
-	err = json.Unmarshal([]byte(cached), playlist)
+	durationMs := 0
+	avatar := ""
+	if len(spotifyPlaylist.Owner.Images) > 0 {
+		avatar = spotifyPlaylist.Owner.Images[0].URL
+	}
+	playlist := types.Playlist{Description: spotifyPlaylist.Description,
+		Collaborative: spotifyPlaylist.Collaborative,
+		Owner:         types.PlaylistOwner{Avatar: avatar, ID: spotifyPlaylist.Owner.ID, Name: spotifyPlaylist.Name},
+	}
+	for _, single := range spotifyPlaylist.Tracks.Tracks {
+		durationMs += single.Track.Duration
+		singleT := &types.SingleTrack{
+			AddedAt:     single.AddedAt,
+			Cover:       single.Track.Album.Images[0].URL,
+			Duration:    single.Track.Duration,
+			Explicit:    single.Track.Explicit,
+			ID:          single.Track.ID.String(),
+			Platform:    util.HostSpotify,
+			Title:       single.Track.Name,
+			URL:         single.Track.Endpoint,
+			ReleaseDate: single.Track.Album.ReleaseDate,
+			Preview:     single.Track.PreviewURL,
+		}
+		for _, r := range single.Track.Artists {
+			singleT.Artistes = append(singleT.Artistes, r.Name)
+		}
+		playlist.Tracks = append(playlist.Tracks, *singleT)
+	}
+	playlist.Duration = durationMs
+
 	if err != nil {
 		return types.Playlist{}, nil
 	}
-
-	// log.Printf("Here is the playlist: %#v\n\n", playlist)
-	return *playlist, err
+	if err != nil {
+		return types.Playlist{}, nil
+	}
+	return playlist, nil
 }
 
 // MakeSpotifyRequest makes a spotify API call
