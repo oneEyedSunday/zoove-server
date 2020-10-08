@@ -110,7 +110,7 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 		log.Println("Search counter does not exist.")
 		log.Println(err)
 		if err == redis.ErrNil {
-			_, err := redis.String(conn.Do("SET", "seaches", "1"))
+			_, err := redis.String(conn.Do("SET", util.RedisSearchesKey, "1"))
 			if err != nil {
 				log.Println("Error saving key into redis")
 				log.Println(err)

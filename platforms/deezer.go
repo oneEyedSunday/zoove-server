@@ -164,11 +164,9 @@ func HostDeezerGetSingleTrackChan(deezerID string, pool *redis.Pool, ch chan *ty
 	key := fmt.Sprintf("%s-%s", util.HostDeezer, deezerID)
 	values, err := redis.String(conn.Do("GET", key))
 	if err != nil {
-		log.Println("Error getting from cache")
+		// log.Println("Error getting from cache")
 		log.Println(err)
 		if err == redis.ErrNil {
-			// TODO: make request to deezer to get here
-			log.Println("Error..")
 			url := fmt.Sprintf("%s/track/%s", os.Getenv("DEEZER_API_BASE"), deezerID)
 			dz := &types.HostDeezerTrack{}
 			err = MakeDeezerRequest(url, dz)
@@ -213,11 +211,10 @@ func HostDeezerGetSingleTrack(deezerID string, pool *redis.Pool) (*types.SingleT
 	key := fmt.Sprintf("%s-%s", util.HostDeezer, deezerID)
 	values, err := redis.String(conn.Do("GET", key))
 	if err != nil {
-		log.Println("Error getting from cache")
+		// log.Println("Error getting from cache")
 		log.Println(err)
 		if err == redis.ErrNil {
-			// TODO: make request to deezer to get here
-			log.Println("Error..")
+
 			url := fmt.Sprintf("%s/track/%s", os.Getenv("DEEZER_API_BASE"), deezerID)
 			dz := &types.HostDeezerTrack{}
 			err = MakeDeezerRequest(url, dz)

@@ -52,7 +52,7 @@ func loadListeners() {
 	for {
 		select {
 		case _ = <-register:
-			log.Println("New client connected..")
+			// log.Println("New client connected..")
 		}
 	}
 }
@@ -148,7 +148,7 @@ func main() {
 					c.Close()
 				}
 				if extracted.Host == util.HostDeezer {
-					log.Println("Wants to search deezer")
+					// log.Println("Wants to search deezer")
 					trackMeta, err = platforms.HostDeezerGetSingleTrack(extracted.ID, pool)
 					if err != nil {
 						c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Error getting deezer single track"}`))
@@ -156,7 +156,7 @@ func main() {
 					}
 
 				} else if extracted.Host == util.HostSpotify {
-					log.Println("Wants to search spotify")
+					// log.Println("Wants to search spotify")
 					trackMeta, err = platforms.HostSpotifyGetSingleTrack(extracted.ID, pool)
 					if err != nil {
 						c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Error getting spotify single track"}`))
@@ -174,11 +174,28 @@ func main() {
 
 				spot, err := search.HostSpotifySearchTrack()
 				if err != nil {
-					log.Println("Errpr searching spotify")
+					// log.Println("Errpr searching spotify")
 					// TODO: try to handle whatever happens here
 					spot = &types.SingleTrack{}
 				}
+				conn := pool.Get()
+				defer conn.Close()
 
+				_, err = redis.String(conn.Do("GET", util.RedisSearchesKey))
+				if err != nil {
+					if err == redis.ErrNil {
+						_, err := redis.String(conn.Do("SET", util.RedisSearchesKey, "1"))
+						if err != nil {
+							log.Println("Error saving searches key into redis")
+						}
+					}
+				}
+
+				searchesCount, err := redis.Int(conn.Do("INCR", util.RedisSearchesKey))
+				if err != nil {
+					log.Println("Error incrementing redis key")
+				}
+				log.Printf("Number of search so far: %d\n", searchesCount)
 				deezerTracks = append(deezerTracks, *deezr)
 				spotifyTracks = append(spotifyTracks, *spot)
 				tracks = append(tracks, spotifyTracks, deezerTracks)
@@ -230,6 +247,25 @@ func main() {
 					deezerTracks = append(deezerTracks, *deezerTrack)
 					spotifyTracks = append(spotifyTracks, *spotifyTrack)
 				}
+
+				conn := pool.Get()
+				defer conn.Close()
+
+				_, err = redis.String(conn.Do("GET", util.RedisSearchesKey))
+				if err != nil {
+					if err == redis.ErrNil {
+						_, err := redis.String(conn.Do("SET", util.RedisSearchesKey, "1"))
+						if err != nil {
+							log.Println("Error saving searches key into redis")
+						}
+					}
+				}
+
+				searchesCount, err := redis.Int(conn.Do("INCR", util.RedisSearchesKey))
+				if err != nil {
+					log.Println("Error incrementing redis key")
+				}
+				log.Printf("Number of search so far: %d\n", searchesCount)
 
 				tracks = append(tracks, deezerTracks, spotifyTracks)
 				c.WriteJSON(tracks)
