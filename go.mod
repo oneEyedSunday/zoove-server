@@ -19,5 +19,5 @@ require (
 	github.com/soveran/redisurl v0.0.0-20180322091936-eb325bc7a4b8
 	github.com/zmb3/spotify v0.0.0-20200814173021-9bec46940cc0
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
-	golang.org/x/sys v0.0.0-20201005172224-997123666555 // indirect
+	golang.org/x/sys v0.0.0-20201022201747-fb209a7c41cd // indirect
 )
