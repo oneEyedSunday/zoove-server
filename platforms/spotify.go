@@ -1,6 +1,7 @@
 package platforms
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -154,6 +155,7 @@ func HostSpotifyReturnAuth(authcode string) (*oauth2.Token, error) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+	// log.Println("Response of oauth should be: ", res.RefreshToken)
 
 	// log.Println(string(body))
 	return res, nil
@@ -183,7 +185,7 @@ func HostSpotifyUserAuth(authcode string) (*spotify.PrivateUser, string, error) 
 	return user, token.RefreshToken, nil
 }
 
-// HostSpotifyGetSingleTrack returns a single (cached) spotify track but using a channel
+// HostSpotifyGetSingleTrackChan returns a single (cached) spotify track but using a channel
 func HostSpotifyGetSingleTrackChan(spotifyID string, pool *redis.Pool, ch chan *types.SingleTrack) {
 	conn := pool.Get()
 	defer conn.Close()
@@ -260,7 +262,6 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 
 			sptf := &types.HostSpotifyTrack{}
 			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID), tokens.AccessToken, sptf)
-			// log.Printf("Searched is: %#v\n", sptf)
 			single := &types.SingleTrack{
 				Cover:       sptf.Album.Images[0].URL,
 				Duration:    sptf.DurationMs,
@@ -340,7 +341,7 @@ func HostSpotifyListeningHistory(refreshToken string) ([]types.SingleTrack, erro
 // HostSpotifyGetAuthorizedAcessToken returns a user authorized token. this is different from GetSpotifyAuthToken because this one can be
 // used for user authorization required actions (for example, getting play history).
 // Use this only when you need to make calls that require user access. this is because it has lower rate limit.
-func HostSpotifyGetAuthorizedAcessToken(refreshToken string) (*types.HostSpotifyAcessTokenRefreshResponse, error) {
+func HostSpotifyGetAuthorizedAcessToken(refreshToken string) (*types.HostSpotifyAccessTokenRefreshResponse, error) {
 	spotifyAuthBaseURL := os.Getenv("SPOTIFY_AUTH_BASE")
 	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
 	spotifyClientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
@@ -367,7 +368,7 @@ func HostSpotifyGetAuthorizedAcessToken(refreshToken string) (*types.HostSpotify
 		return nil, err
 	}
 	defer doRequest.Body.Close()
-	authRes := &types.HostSpotifyAcessTokenRefreshResponse{}
+	authRes := &types.HostSpotifyAccessTokenRefreshResponse{}
 	err = json.Unmarshal(body, authRes)
 	if err != nil {
 		return nil, err
@@ -493,6 +494,86 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 		return types.Playlist{}, nil
 	}
 	return playlist, nil
+}
+
+// HostSpotifyCreatePlaylist creates a playlist with tracks for a user
+func HostSpotifyCreatePlaylist(spotifyID, title, token string, tracks []string) error {
+	spotifyAPIBase := os.Getenv("SPOTIFY_API_BASE")
+
+	url := fmt.Sprintf("%s/v1/users/%s/playlists", spotifyAPIBase, spotifyID)
+	createdPlaylist := &types.HostSpotifyNewPlaylistCreationResponse{}
+	playlist := types.HostSpotifyCreatePlaylist{Name: title}
+	bodyJSON, err := json.Marshal(playlist)
+	if err != nil {
+		log.Println("Error serializing playlist creation JSON")
+		log.Println(err)
+		return err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyJSON))
+	if err != nil {
+		log.Println("Error POSTing to endpoint")
+		log.Println(err)
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	err = ExecuteRequest(req, createdPlaylist)
+
+	if err != nil {
+		log.Println("Error making spotify post request to create playlist")
+		log.Println(err)
+		return err
+	}
+
+	var spotifyURIs []string
+	for _, elem := range tracks {
+		formatted := fmt.Sprintf("spotify:track:%s", elem)
+		spotifyURIs = append(spotifyURIs, formatted)
+	}
+
+	url = fmt.Sprintf("%s/v1/playlists/%s/tracks?uris=%s", spotifyAPIBase, createdPlaylist.ID, strings.Join(spotifyURIs, ","))
+	log.Println("URL of the songs to add: ", url)
+	spotifyPlaylist := &types.HostSpotifyAddNewPlaylistTracksResponse{}
+	req, err = http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		log.Println("Error GETing")
+		log.Println(err)
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	err = ExecuteRequest(req, spotifyPlaylist)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ExecuteRequest executes an http API call and deserializes the returned data into an input result
+func ExecuteRequest(req *http.Request, result interface{}) error {
+	client := http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		log.Println("Error executing request call")
+		log.Println(err)
+		return err
+	}
+	defer response.Body.Close()
+	out, err := ioutil.ReadAll(response.Body)
+	if response.StatusCode == http.StatusUnauthorized {
+		log.Println("DOes not have permission to perform that action")
+		return types.UnAuthorizedScope
+	}
+	err = json.NewDecoder(bytes.NewReader(out)).Decode(result)
+	if err != nil {
+		log.Println("Error deserializing body in JSON Decoder")
+		return err
+	}
+	return nil
 }
 
 // MakeSpotifyRequest makes a spotify API call

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"zoove/controllers"
 	"zoove/db"
@@ -28,6 +30,7 @@ var register = make(chan *websocket.Conn)
 var jaegerChan = make(chan *SocketMessage)
 var spotifyChan = make(chan *types.SingleTrack)
 var deezerChan = make(chan *types.SingleTrack)
+var createPlaylistChan = make(chan bool)
 
 func loadEnv() {
 	envr := os.Getenv("ENV")
@@ -43,9 +46,16 @@ func init() {
 	loadEnv()
 }
 
+// SocketMessage represents an incoming socket message
 type SocketMessage struct {
-	Type string `json:"action_type"`
-	URL  string `json:"url"`
+	Type    string `json:"action_type"`
+	URL     string `json:"url"`
+	Payload struct {
+		Title    string   `json:"title"`
+		Tracks   []string `json:"tracks"`
+		Platform string   `json:"platform"`
+	} `json:"payload,omitempty"`
+	UserID string `json:"userid,omitempty"`
 }
 
 func loadListeners() {
@@ -55,6 +65,183 @@ func loadListeners() {
 		}
 
 	}
+}
+
+// SocketListener represents a "class" for a typical listenerdfkdfjkefd
+type SocketListener struct {
+	deserialize   SocketMessage
+	c             *websocket.Conn
+	trackMeta     *types.SingleTrack
+	deezerTracks  []types.SingleTrack
+	spotifyTracks []types.SingleTrack
+	tracks        [][]types.SingleTrack
+	client        *db.PrismaClient
+	playlistMeta  *types.Playlist
+}
+
+// GetTrackListener listens for tracks action
+func (listener *SocketListener) GetTrackListener() {
+
+	extracted, err := util.ExtractInfoMetadata(listener.deserialize.URL)
+	if err != nil {
+		log.Println("Error extracting")
+		log.Println(err)
+		listener.c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"error", "message":"Its me not you...."`))
+		listener.c.Close()
+	}
+	if extracted.Host == util.HostDeezer {
+		// log.Println("Wants to search deezer")
+		listener.trackMeta, err = platforms.HostDeezerGetSingleTrack(extracted.ID, pool)
+		if err != nil {
+			listener.c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Error getting deezer single track"}`))
+			listener.c.Close()
+		}
+
+	} else if extracted.Host == util.HostSpotify {
+		// log.Println("Wants to search spotify")
+		listener.trackMeta, err = platforms.HostSpotifyGetSingleTrack(extracted.ID, pool)
+		if err != nil {
+			listener.c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Error getting spotify single track"}`))
+			listener.c.Close()
+		}
+	}
+	search := platforms.NewTrackToSearch(listener.trackMeta.Title, listener.trackMeta.Artistes[0], pool)
+	deezr, err := search.HostDeezerSearchTrack()
+	if err != nil {
+		log.Println("Error searching deezer")
+		// TODO: try to handle whatever happens here
+		deezr = &types.SingleTrack{}
+	}
+
+	spot, err := search.HostSpotifySearchTrack()
+	if err != nil {
+		// log.Println("Errpr searching spotify")
+		// TODO: try to handle whatever happens here
+		spot = &types.SingleTrack{}
+	}
+	conn := pool.Get()
+	defer conn.Close()
+
+	_, err = redis.String(conn.Do("GET", util.RedisSearchesKey))
+	if err != nil {
+		if err == redis.ErrNil {
+			_, err := redis.String(conn.Do("SET", util.RedisSearchesKey, "1"))
+			if err != nil {
+				log.Println("Error saving searches key into redis")
+			}
+		}
+	}
+
+	searchesCount, err := redis.Int(conn.Do("INCR", util.RedisSearchesKey))
+	if err != nil {
+		log.Println("Error incrementing redis key")
+	}
+	log.Printf("Number of search so far: %d\n", searchesCount)
+	listener.deezerTracks = append(listener.deezerTracks, *deezr)
+	listener.spotifyTracks = append(listener.spotifyTracks, *spot)
+	listener.tracks = append(listener.tracks, listener.spotifyTracks, listener.deezerTracks)
+	listener.c.WriteJSON(listener.tracks)
+
+	// we gotta reset those values, else, it'd just keep pushing to the arrays and returning increasing values as the user makes more requests
+	// perhaps have @Davidemi to review this for me.
+	listener.tracks = nil
+	listener.deezerTracks = nil
+	listener.spotifyTracks = nil
+	listener.c.Close()
+}
+
+// GetTrackListener runs all the stuff that gets the equivalents for tracks only
+func GetTrackListener(sk *SocketMessage, c *websocket.Conn, trackMeta *types.SingleTrack, deezerTracks []types.SingleTrack, spotifyTracks []types.SingleTrack, tracks [][]types.SingleTrack) {
+}
+
+// GetPlaylistListener returns the playlist listener
+func (listener *SocketListener) GetPlaylistListener() {
+	extracted, err := util.ExtractInfoMetadata(listener.deserialize.URL)
+	if err != nil {
+		log.Println("Error extracting")
+		log.Println(err)
+		listener.c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"error", "message":"Its me not you...."`))
+		listener.c.Close()
+	}
+
+	if extracted.Host == util.HostDeezer {
+		deezerPl, err := platforms.HostDeezerFetchPlaylistTracks(extracted.ID, pool)
+		if err != nil {
+			log.Println("Error fetching playlist tracks.")
+			log.Println(err)
+			if err.Error() == "Not Found" {
+				listener.playlistMeta = &types.Playlist{}
+			}
+			// TODO: try to handle whatever happens here
+		}
+		listener.playlistMeta = &deezerPl
+	} else if extracted.Host == util.HostSpotify {
+		spotifyPl, err := platforms.HostSpotifyFetchPlaylistTracks(extracted.ID, pool)
+		if err != nil {
+			log.Println("Error fetching spotify playlist tracks.")
+		}
+		listener.playlistMeta = &spotifyPl
+	}
+
+	for _, singleTrack := range listener.playlistMeta.Tracks {
+		search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], pool)
+		go search.HostDeezerSearchTrackChan(deezerChan)
+		deezerTrack := <-deezerChan
+		if deezerTrack == nil {
+			continue
+		}
+		go search.HostSpotifySearchTrackChan(spotifyChan)
+		spotifyTrack := <-spotifyChan
+		if spotifyTrack == nil {
+			continue
+		}
+
+		listener.deezerTracks = append(listener.deezerTracks, *deezerTrack)
+		listener.spotifyTracks = append(listener.spotifyTracks, *spotifyTrack)
+	}
+
+	conn := pool.Get()
+	defer conn.Close()
+
+	_, err = redis.String(conn.Do("GET", util.RedisSearchesKey))
+	if err != nil {
+		if err == redis.ErrNil {
+			_, err := redis.String(conn.Do("SET", util.RedisSearchesKey, "1"))
+			if err != nil {
+				log.Println("Error saving searches key into redis")
+			}
+		}
+	}
+
+	searchesCount, err := redis.Int(conn.Do("INCR", util.RedisSearchesKey))
+	if err != nil {
+		log.Println("Error incrementing redis key")
+	}
+	log.Printf("Number of search so far: %d\n", searchesCount)
+	listener.tracks = append(listener.tracks, listener.deezerTracks, listener.spotifyTracks)
+	res := map[string]interface{}{
+		"playlist_title": listener.playlistMeta.Title,
+		"payload":        listener.tracks,
+	}
+	listener.c.WriteJSON(res)
+	listener.deezerTracks = nil
+	listener.spotifyTracks = nil
+	listener.tracks = nil
+	listener.c.Close()
+}
+
+// CreatePlaylistListener creates a playlist for a user.
+func (listener *SocketListener) CreatePlaylistListener() {
+	existing, _ := listener.client.User.FindOne(db.User.PlatformID.Equals(listener.deserialize.UserID)).Exec(context.Background())
+	go platforms.CreatePlaylistChan(existing.PlatformID, listener.deserialize.Payload.Title, existing.Token, listener.deserialize.Payload.Platform, listener.deserialize.Payload.Tracks, createPlaylistChan)
+	_ = <-createPlaylistChan
+	res := map[string]interface{}{
+		"action":  "create",
+		"payload": true,
+	}
+
+	listener.c.WriteJSON(res)
+	listener.c.Close()
 }
 
 func main() {
@@ -82,7 +269,6 @@ func main() {
 	go loadListeners()
 
 	app.Use(cors.New(cors.Config{
-		// AllowOrigins: "*",
 		AllowMethods: fmt.Sprintf("%s,%s,%s,%s,%s", http.MethodGet, http.MethodPatch, http.MethodPost, http.MethodOptions, http.MethodDelete),
 	}))
 
@@ -90,13 +276,31 @@ func main() {
 		AccessToken string `query:"access_token"`
 	}
 
-	app.Get("/deezer/join", func(c *fiber.Ctx) error {
-		DeezerAuthBase := os.Getenv("DEEZER_AUTH_BASE")
-		DeezerAppID := os.Getenv("DEEZER_APP_ID")
-		DeezerRedirectURI := os.Getenv("DEEZER_REDIRECT_URI")
-		scopes := "basic_access,email,offline_access,listening_history"
-		url := fmt.Sprintf("%s/auth.php?app_id=%s&redirect_uri=%s&perms=%s", DeezerAuthBase, DeezerAppID, DeezerRedirectURI, scopes)
-		return c.Redirect(url)
+	app.Get("/deezer/channel.html", func(c *fiber.Ctx) error {
+		return c.Status(http.StatusOK).SendFile("./channel.html")
+	})
+
+	app.Get("/:platform/join", func(c *fiber.Ctx) error {
+		platform := c.Params("platform")
+		log.Print("User is trying to join or login")
+		log.Println(platform)
+		if platform == util.HostDeezer {
+
+			DeezerAuthBase := os.Getenv("DEEZER_AUTH_BASE")
+			DeezerAppID := os.Getenv("DEEZER_APP_ID")
+			DeezerRedirectURI := os.Getenv("DEEZER_REDIRECT_URI")
+			scopes := "basic_access,email,offline_access,listening_history,manage_library"
+			url := fmt.Sprintf("%s/auth.php?app_id=%s&redirect_uri=%s&perms=%s", DeezerAuthBase, DeezerAppID, DeezerRedirectURI, scopes)
+			return c.Redirect(url)
+		} else if platform == util.HostSpotify {
+			spotifyAuthBase := os.Getenv("SPOTIFY_AUTH_BASE")
+			spotifyAppID := os.Getenv("SPOTIFY_APP_ID")
+			spotifyRedirectURI := os.Getenv("SPOTIFY_REDIRECT_URI")
+			scopes := url.QueryEscape("user-read-private user-read-email playlist-modify-public playlist-modify-private user-library-modify user-top-read user-read-recently-played user-read-currently-playing")
+			url := fmt.Sprintf("%s/authorize?response_type=code&client_id=%s&scope=%s&redirect_uri=%s", spotifyAuthBase, spotifyAppID, scopes, spotifyRedirectURI)
+			return c.Redirect(url)
+		}
+		return util.NotImplementedError(c, nil)
 	})
 
 	app.Use("/api/v1.1/ws", func(ctx *fiber.Ctx) error {
@@ -111,10 +315,8 @@ func main() {
 		var tracks = [][]types.SingleTrack{}
 		var deezerTracks = []types.SingleTrack{}
 		var spotifyTracks = []types.SingleTrack{}
-		// ticker := time.NewTimer(10 * time.Second)
 		pool = &redis.Pool{
 			Dial: func() (redis.Conn, error) {
-				// log.Println(os.Getenv("REDIS_URL"))
 				return redisurl.Connect()
 			},
 		}
@@ -128,6 +330,7 @@ func main() {
 				}
 				return
 			}
+
 			deserialize := &SocketMessage{}
 			err = json.Unmarshal(msg, deserialize)
 			if err != nil {
@@ -138,156 +341,25 @@ func main() {
 
 			var trackMeta = &types.SingleTrack{}
 			var playlistMeta = &types.Playlist{}
-
+			listener := &SocketListener{deserialize: *deserialize,
+				c: c, client: client, deezerTracks: deezerTracks,
+				playlistMeta:  playlistMeta,
+				spotifyTracks: spotifyTracks,
+				trackMeta:     trackMeta,
+				tracks:        tracks,
+			}
 			if deserialize.Type == "track" {
-
-				extracted, err := util.ExtractInfoMetadata(deserialize.URL)
-				if err != nil {
-					log.Println("Error extracting")
-					log.Println(err)
-					c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"error", "message":"Its me not you...."`))
-					c.Close()
-				}
-				if extracted.Host == util.HostDeezer {
-					// log.Println("Wants to search deezer")
-					trackMeta, err = platforms.HostDeezerGetSingleTrack(extracted.ID, pool)
-					if err != nil {
-						c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Error getting deezer single track"}`))
-						c.Close()
-					}
-
-				} else if extracted.Host == util.HostSpotify {
-					// log.Println("Wants to search spotify")
-					trackMeta, err = platforms.HostSpotifyGetSingleTrack(extracted.ID, pool)
-					if err != nil {
-						c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Error getting spotify single track"}`))
-						c.Close()
-					}
-				}
-
-				search := platforms.NewTrackToSearch(trackMeta.Title, trackMeta.Artistes[0], pool)
-				deezr, err := search.HostDeezerSearchTrack()
-				if err != nil {
-					log.Println("Error searching deezer")
-					// TODO: try to handle whatever happens here
-					deezr = &types.SingleTrack{}
-				}
-
-				spot, err := search.HostSpotifySearchTrack()
-				if err != nil {
-					// log.Println("Errpr searching spotify")
-					// TODO: try to handle whatever happens here
-					spot = &types.SingleTrack{}
-				}
-				conn := pool.Get()
-				defer conn.Close()
-
-				_, err = redis.String(conn.Do("GET", util.RedisSearchesKey))
-				if err != nil {
-					if err == redis.ErrNil {
-						_, err := redis.String(conn.Do("SET", util.RedisSearchesKey, "1"))
-						if err != nil {
-							log.Println("Error saving searches key into redis")
-						}
-					}
-				}
-
-				searchesCount, err := redis.Int(conn.Do("INCR", util.RedisSearchesKey))
-				if err != nil {
-					log.Println("Error incrementing redis key")
-				}
-				log.Printf("Number of search so far: %d\n", searchesCount)
-				deezerTracks = append(deezerTracks, *deezr)
-				spotifyTracks = append(spotifyTracks, *spot)
-				tracks = append(tracks, spotifyTracks, deezerTracks)
-				c.WriteJSON(tracks)
-
-				// we gotta reset those values, else, it'd just keep pushing to the arrays and returning increasing values as the user makes more requests
-				// perhaps have @Davidemi to review this for me.
-				tracks = nil
-				deezerTracks = nil
-				spotifyTracks = nil
-				c.Close()
+				listener.GetTrackListener()
 			} else if deserialize.Type == "playlist" {
-				extracted, err := util.ExtractInfoMetadata(deserialize.URL)
-				if err != nil {
-					log.Println("Error extracting")
-					log.Println(err)
-					c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"error", "message":"Its me not you...."`))
-					c.Close()
-				}
-
-				if extracted.Host == util.HostDeezer {
-					deezerPl, err := platforms.HostDeezerFetchPlaylistTracks(extracted.ID, pool)
-					if err != nil {
-						log.Println("Error fetching playlist tracks.")
-						// TODO: try to handle whatever happens here
-					}
-					playlistMeta = &deezerPl
-				} else if extracted.Host == util.HostSpotify {
-					spotifyPl, err := platforms.HostSpotifyFetchPlaylistTracks(extracted.ID, pool)
-					if err != nil {
-						log.Println("Error fetching spotify playlist tracks.")
-					}
-					playlistMeta = &spotifyPl
-				}
-
-				for _, singleTrack := range playlistMeta.Tracks {
-					search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], pool)
-					go search.HostDeezerSearchTrackChan(deezerChan)
-					deezerTrack := <-deezerChan
-					if deezerTrack == nil {
-						continue
-					}
-					go search.HostSpotifySearchTrackChan(spotifyChan)
-					spotifyTrack := <-spotifyChan
-					if spotifyTrack == nil {
-						continue
-					}
-
-					deezerTracks = append(deezerTracks, *deezerTrack)
-					spotifyTracks = append(spotifyTracks, *spotifyTrack)
-				}
-
-				conn := pool.Get()
-				defer conn.Close()
-
-				_, err = redis.String(conn.Do("GET", util.RedisSearchesKey))
-				if err != nil {
-					if err == redis.ErrNil {
-						_, err := redis.String(conn.Do("SET", util.RedisSearchesKey, "1"))
-						if err != nil {
-							log.Println("Error saving searches key into redis")
-						}
-					}
-				}
-
-				searchesCount, err := redis.Int(conn.Do("INCR", util.RedisSearchesKey))
-				if err != nil {
-					log.Println("Error incrementing redis key")
-				}
-				log.Printf("Number of search so far: %d\n", searchesCount)
-
-				tracks = append(tracks, deezerTracks, spotifyTracks)
-				c.WriteJSON(tracks)
-				deezerTracks = nil
-				spotifyTracks = nil
-				tracks = nil
-				c.Close()
+				listener.GetPlaylistListener()
+			} else if deserialize.Type == "create_playlist" {
+				listener.CreatePlaylistListener()
 			} else {
-				log.Println("Client just pinged for healthcheck")
 				c.Close()
 			}
-			// select {
-			// case <-ticker.C:
-			// 	err := c.WriteJSON(`{"type":"ping"}`)
-			// 	if err != nil {
-			// 		log.Println("Error pinging client")
-			// 	}
-			// }
 		}
 	}))
-
+	app.Get("/:platform/signup", userHandler.SignupRedirect)
 	app.Get("/deezer/verify", userHandler.VerifyDeezerSignup)
 	app.Get("/:platform/oauth", userHandler.AuthorizeUser)
 	app.Post("/api/v1.1/user/join", userHandler.AddNewUser)

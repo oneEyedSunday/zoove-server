@@ -30,6 +30,10 @@ type Playlist struct {
 	Tracks        []SingleTrack `json:"tracks"`
 }
 
+type HostSpotifyCreatePlaylist struct {
+	Name string `json:"name"`
+}
+
 type PlaylistOwner struct {
 	Name   string `json:"name"`
 	ID     string `json:"id"`
@@ -182,6 +186,17 @@ type ExtractedInfo struct {
 type TrackToSearch struct {
 	Title   string
 	Artiste string
+}
+
+type NewPlaylist struct {
+	Title           string   `json:"title"`
+	IsPublic        bool     `json:"is_public"`
+	IsCollaborative bool     `json:"is_collab"`
+	Payload         []string `json:"tracks"`
+}
+
+type DeezerPlaylistCreationResponse struct {
+	ID int64 `json:"id"`
 }
 
 type HostSpotifySearchTrack struct {
@@ -508,7 +523,7 @@ type HostSpotifyHistory struct {
 	Href  string `json:"href"`
 }
 
-type HostSpotifyAcessTokenRefreshResponse struct {
+type HostSpotifyAccessTokenRefreshResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`
 	Scope       string `json:"scope"`
@@ -582,4 +597,50 @@ type HostDeezerPlaylistResponse struct {
 		} `json:"data"`
 		Checksum string `json:"checksum"`
 	} `json:"tracks"`
+}
+
+type HostSpotifyNewPlaylistCreationResponse struct {
+	Collaborative bool        `json:"collaborative"`
+	Description   interface{} `json:"description"`
+	ExternalUrls  struct {
+		Spotify string `json:"spotify"`
+	} `json:"external_urls"`
+	Followers struct {
+		Href  interface{} `json:"href"`
+		Total int         `json:"total"`
+	} `json:"followers"`
+	Href   string        `json:"href"`
+	ID     string        `json:"id"`
+	Images []interface{} `json:"images"`
+	Name   string        `json:"name"`
+	Owner  struct {
+		ExternalUrls struct {
+			Spotify string `json:"spotify"`
+		} `json:"external_urls"`
+		Href string `json:"href"`
+		ID   string `json:"id"`
+		Type string `json:"type"`
+		URI  string `json:"uri"`
+	} `json:"owner"`
+	Public     bool   `json:"public"`
+	SnapshotID string `json:"snapshot_id"`
+	Tracks     struct {
+		Href     string        `json:"href"`
+		Items    []interface{} `json:"items"`
+		Limit    int           `json:"limit"`
+		Next     interface{}   `json:"next"`
+		Offset   int           `json:"offset"`
+		Previous interface{}   `json:"previous"`
+		Total    int           `json:"total"`
+	} `json:"tracks"`
+	Type string `json:"type"`
+	URI  string `json:"uri"`
+}
+
+type HostSpotifyAddNewPlaylistTracksResponse struct {
+	SnapshotID string `json:"snapshot_id"`
+}
+
+type NewSpotifyPlaylist struct {
+	Name string `json:"name"`
 }

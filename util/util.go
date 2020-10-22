@@ -1,14 +1,16 @@
 package util
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+	"zoove/errors"
 	"zoove/types"
 
 	"github.com/dgrijalva/jwt-go"
@@ -104,7 +106,7 @@ func ParseJwtToken(value, secret string) (*types.Token, error) {
 	tk := &types.Token{}
 	tok, err := jwt.ParseWithClaims(value, tk, func(token *jwt.Token) (interface{}, error) {
 		if token.Method != jwt.SigningMethodHS256 {
-			return nil, errors.New("invalid signing method")
+			return nil, errors.BadOrInvalidJwt
 		}
 		return []byte(secret), nil
 	})
@@ -114,10 +116,10 @@ func ParseJwtToken(value, secret string) (*types.Token, error) {
 	// log.Printf("%#v\n", tp.Error())
 	if err != nil {
 		log.Printf("err: %#v\n", err.Error())
-		return nil, errors.New("malformed authorization token")
+		return nil, errors.BadOrInvalidJwt
 	}
 	if !tok.Valid {
-		return nil, errors.New("malformed or invalid authorization token")
+		return nil, errors.BadOrInvalidJwt
 	}
 	return tk, nil
 }
@@ -189,3 +191,49 @@ func ExtractInfoMetadata(rawURL string) (*types.ExtractedInfo, error) {
 func EncryptRefreshToken(refreshToken string) {}
 
 // TODO: implement refresh token encryption
+
+func MakeRequest(url string, src interface{}) error {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	// log.Printf("The URL we're calling is: %#v\n", url)
+	if err != nil {
+		log.Println("Error GETin URL")
+		return err
+	}
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Println("Error making HTTP req")
+		return err
+	}
+	defer res.Body.Close()
+	body, err := ioutil.ReadAll(res.Body)
+	// log.Printf("Body is: %s", string(body))
+	if strings.Contains(string(body), `{"error`) {
+		return errors.NotFound
+	}
+
+	if err != nil {
+		log.Println("Error reading response into memory")
+		return err
+	}
+	if res.StatusCode == http.StatusUnauthorized {
+		return errors.UnAuthorized
+	}
+
+	if res.StatusCode == http.StatusInternalServerError {
+		return err
+	}
+
+	if string(body) == "true" {
+		src = true
+		return nil
+	}
+
+	err = json.Unmarshal(body, src)
+	if err != nil {
+		log.Println("Error unserializing response into json")
+		return err
+	}
+
+	return nil
+}

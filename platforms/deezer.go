@@ -395,3 +395,27 @@ func HostDeezerFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.P
 	// log.Printf("Playlist is: %#v", playlist)
 	return *playlist, nil
 }
+
+// HostDeezerCreatePlaylist creates a new playlist for the deezer user
+func HostDeezerCreatePlaylist(title, userid, token string, tracks []string) error {
+	deezerAPIBase := os.Getenv("DEEZER_API_BASE")
+	url := fmt.Sprintf("%s/user/%s/playlists?access_token=%s&request_method=post&title=%s", deezerAPIBase, userid, token, title)
+	src := &types.DeezerPlaylistCreationResponse{}
+	err := util.MakeRequest(url, src)
+	if err != nil {
+		log.Println("Error making request here.")
+		log.Println(err)
+		return err
+	}
+
+	allTracks := strings.Join(tracks, ",")
+	playlistURL := fmt.Sprintf("%s/playlist/%d/tracks?access_token=%s&request_method=post&songs=%s", deezerAPIBase, src.ID, token, allTracks)
+	err = util.MakeRequest(playlistURL, true)
+
+	if err != nil {
+		log.Println("Error  making request to add tracks to playlist")
+		log.Println(err)
+		return err
+	}
+	return nil
+}

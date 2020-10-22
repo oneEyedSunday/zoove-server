@@ -12,6 +12,7 @@ require (
 	github.com/gomodule/redigo v1.8.2
 	github.com/google/uuid v1.1.2
 	github.com/joho/godotenv v1.3.0
+	github.com/jonahgeorge/force-ssl-heroku v1.0.1 // indirect
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/prisma/prisma-client-go v0.0.9
 	github.com/savsgio/gotils v0.0.0-20200909101946-939aa3fc74fb // indirect

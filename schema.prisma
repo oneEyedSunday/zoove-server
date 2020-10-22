@@ -9,19 +9,20 @@ generator db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-  updatedAt DateTime
-  fullName  String
-  firstName String
-  lastName  String
-  country   String
-  lang      String
-  uuid      String   @unique
-  email     String   @unique
-  username  String   @unique
-  platform  String
-  avatar    String
-  token     String
-  plan      String
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+  fullName   String
+  firstName  String
+  lastName   String
+  country    String
+  lang       String
+  uuid       String   @unique
+  email      String   @unique
+  username   String   @unique
+  platform   String
+  avatar     String
+  token      String
+  plan       String
+  platformId String   @unique
 }

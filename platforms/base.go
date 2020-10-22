@@ -3,6 +3,7 @@ package platforms
 import (
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"zoove/util"
 
@@ -49,6 +50,41 @@ func AuthorizeUser(ctx *fiber.Ctx) {
 		return
 	}
 	// url := fmt.Sprintf("%s/oauth/auth.php?app_id=%s&redirect_uri=%s&perms=%s,%s,%s,%s,%s", os.Getenv("DEEZER_AUTH_BASE"), os.Getenv("DEEZER_APP_ID"), os.Getenv("DEEZER_REDIRECT_URI"), util.HostDeezerBasicAccessPermission, util.HostDeezerEmailPermission, util.HostDeezerOfflineAccessPermission, util.HostDeezerManageLibraryAccessPermission, util.HostDeezerListeningHistoryPermission)
+}
+
+func CreatePlaylistChan(userID, title, token, platform string, tracks []string, ch chan bool) {
+
+	if platform == util.HostDeezer {
+		err := HostDeezerCreatePlaylist(url.QueryEscape(title), userID, token, tracks)
+		if err != nil {
+			log.Println("Error creating playlist")
+			log.Println(err)
+			ch <- false
+			return
+		}
+		ch <- true
+		return
+	} else if platform == util.HostSpotify {
+		spotifyTokens, err := HostSpotifyGetAuthorizedAcessToken(token)
+		if err != nil {
+			log.Println("Error getting correct access token for spotify")
+			log.Println(err)
+			ch <- false
+			return
+		}
+
+		err = HostSpotifyCreatePlaylist(userID, title, spotifyTokens.AccessToken, tracks)
+		if err != nil {
+			log.Println("Error creating spotify playlist")
+			log.Println(err)
+			ch <- false
+			return
+		}
+		ch <- true
+		return
+	}
+	ch <- false
+	return
 }
 
 // type PlaylistToSearch struct {

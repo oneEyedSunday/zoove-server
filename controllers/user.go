@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -19,6 +21,7 @@ import (
 	"github.com/gomodule/redigo/redis"
 	"github.com/google/uuid"
 	"github.com/soveran/redisurl"
+	"github.com/zmb3/spotify"
 )
 
 // User represents blueprint of things needed to perform operations for user
@@ -55,7 +58,7 @@ func (user *User) VerifyDeezerSignup(ctx *fiber.Ctx) error {
 	claims := &types.Token{
 		Platform:      prs.Platform,
 		PlatformID:    prs.PlatformID,
-		PlatformToken: existing.Token,
+		PlatformToken: "", // existing.Token,
 		UUID:          existing.UUID,
 	}
 
@@ -98,7 +101,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 		claims := &types.Token{
 			Platform:      util.HostDeezer,
 			PlatformID:    platformid,
-			PlatformToken: token,
+			PlatformToken: "", // token,
 			UUID:          randomid,
 		}
 
@@ -117,6 +120,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					plan = "premium"
 				}
 
+				uid := strconv.Itoa(profile.ID)
 				log.Println("User does not exist. should create now")
 				_, err = user.DB.User.CreateOne(
 					db.User.UpdatedAt.Set(time.Now()),
@@ -132,6 +136,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					db.User.Avatar.Set(profile.Picture),
 					db.User.Token.Set(token), // T0DO: ENCRYPT THIS..
 					db.User.Plan.Set(plan),
+					db.User.PlatformID.Set(uid),
 				).Exec(context.Background())
 				if err != nil {
 					log.Println("Error saving new user")
@@ -139,24 +144,35 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					return util.BadRequest(ctx, err)
 				}
 
-				out := map[string]interface{}{
+				clientURL := os.Getenv("CLIENT_URL")
+				_ = map[string]string{
 					"token": signedJWT,
-					// "user":  newUser,
 				}
-				return util.RequestCreated(ctx, out)
+
+				encToken := base64.StdEncoding.EncodeToString([]byte(signedJWT))
+				redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
+				return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
 			}
 		}
+
+		// update here with new token
+		// log.Printf("New token for the user from deezer auth is: %s\n", token)
+		_, err = user.DB.User.FindOne(db.User.ID.Equals(existing.ID)).Update(db.User.Token.Set(token)).Exec(context.Background())
+		if err != nil {
+			log.Println("Error updating user token")
+			return util.InternalServerError(ctx, err)
+		}
+		clientURL := os.Getenv("CLIENT_URL")
 		claims.UUID = existing.UUID
-		signedJWT, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
-		out := map[string]interface{}{
-			"token": signedJWT,
+		signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+		_ = map[string]string{
+			"token": signedJwt,
 		}
 
-		if err != nil {
-			panic(err)
-		}
-		return util.RequestOk(ctx, out)
-		// ctx.Status(http.StatusNoContent)
+		encToken := base64.StdEncoding.EncodeToString([]byte(signedJwt))
+		redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
+		return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
+
 	} else if platform == util.HostSpotify {
 		spotify, refreshToken, err := platforms.HostSpotifyUserAuth(authcode)
 		if err != nil {
@@ -177,10 +193,6 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 			log.Println("Error finding from the record")
 			if err == db.ErrNotFound {
 				signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
-				out := map[string]string{
-					"token": signedJwt,
-				}
-
 				ppix := ""
 				if len(spotify.Images) == 0 {
 					ppix = ""
@@ -202,6 +214,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					db.User.Avatar.Set(ppix),
 					db.User.Token.Set(refreshToken),
 					db.User.Plan.Set(spotify.Product),
+					db.User.PlatformID.Set(spotify.ID),
 				).Exec(context.Background())
 
 				if err != nil {
@@ -209,19 +222,30 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					log.Println(err)
 					return util.InternalServerError(ctx, err)
 				}
-				log.Println("Done with this now....")
-				return util.RequestCreated(ctx, out)
+				clientURL := os.Getenv("CLIENT_URL")
+
+				encToken := base64.StdEncoding.EncodeToString([]byte(signedJwt))
+				redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
+				return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
 			}
 		}
+		// update here with new token
+		_, err = user.DB.User.FindOne(db.User.ID.Equals(existing.ID)).Update(db.User.Token.Set(refreshToken)).Exec(context.Background())
+		if err != nil {
+			log.Println("Error updating user token")
+			return util.InternalServerError(ctx, err)
+		}
 
+		clientURL := os.Getenv("CLIENT_URL")
 		claims.UUID = existing.UUID
 		signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
-		out := map[string]string{
+		_ = map[string]string{
 			"token": signedJwt,
 		}
 
-		util.RequestOk(ctx, out)
-		return ctx.JSON(out)
+		encToken := base64.StdEncoding.EncodeToString([]byte(signedJwt))
+		redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
+		return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
 	}
 	return util.NotImplementedError(ctx, nil)
 }
@@ -389,6 +413,7 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 				db.User.Avatar.Set(newUser.Avatar),
 				db.User.Token.Set(newUser.Token),
 				db.User.Plan.Set(newUser.Plan),
+				db.User.PlatformID.Set(newUser.PlatformID),
 				db.User.CreatedAt.Set(time.Now()),
 			).Exec(context.Background())
 			if err != nil {
@@ -418,4 +443,63 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 		"user":  existing,
 	}
 	return util.RequestOk(ctx, res)
+}
+
+// SignupRedirect makes request from the server-side to authorize the user
+func (user *User) SignupRedirect(ctx *fiber.Ctx) error {
+	platform := ctx.Params("platform")
+
+	if platform == util.HostDeezer {
+		DeezerAuthBase := os.Getenv("DEEZER_AUTH_BASE")
+		DeezerAppID := os.Getenv("DEEZER_APP_ID")
+		DeezerRedirectURI := os.Getenv("DEEZER_REDIRECT_URI")
+		scopes := "basic_access,email,offline_access,listening_history"
+		link := fmt.Sprintf("%s/auth.php?app_id=%s&redirect_uri=%s&perms=%s", DeezerAuthBase, DeezerAppID, DeezerRedirectURI, scopes)
+		return ctx.Redirect(link)
+	} else if platform == util.HostSpotify {
+		spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
+		scopes := url.QueryEscape(fmt.Sprintf("%s %s %s %s %s %s %s", spotify.ScopeUserReadPrivate, spotify.ScopeUserReadEmail,
+			spotify.ScopePlaylistModifyPublic, spotify.ScopeUserLibraryModify,
+			spotify.ScopeUserTopRead, spotify.ScopeUserReadRecentlyPlayed,
+			spotify.ScopeUserReadCurrentlyPlaying))
+		spotifyRedirectURI := os.Getenv("SPOTIFY_REDIRECT_URI")
+		spotifyAuthBase := os.Getenv("SPOTIFY_AUTH_BASE")
+		link := fmt.Sprintf("%s/authorize/?response_type=code&client_id=%s&scope=%s&redirect_uri=%s", spotifyAuthBase, spotifyClientID, scopes, spotifyRedirectURI)
+		return ctx.Redirect(link)
+	}
+
+	return util.NotImplementedError(ctx, nil)
+}
+
+// CreatePlaylist creates a new playlist for user
+func (user *User) CreatePlaylist(ctx *fiber.Ctx) error {
+	platform := ctx.Params("platform")
+	uuid := ctx.Locals("uuid").(string)
+	newPlaylist := &types.NewPlaylist{}
+	err := ctx.BodyParser(&newPlaylist)
+
+	existing, _ := user.DB.User.FindOne(db.User.UUID.Equals(uuid)).Exec(context.Background())
+	if err != nil {
+		log.Println("Error parsing body into struct")
+		log.Println(err)
+		return util.InternalServerError(ctx, err)
+	}
+	if platform == util.HostDeezer {
+		err = platforms.HostDeezerCreatePlaylist(newPlaylist.Title, existing.UUID, existing.Token, newPlaylist.Payload)
+		if err != nil {
+			log.Println("Error creating playlists for deezer user")
+			log.Println(err)
+			return util.InternalServerError(ctx, err)
+		}
+	} else if platform == util.HostSpotify {
+		err := platforms.HostSpotifyCreatePlaylist(existing.UUID, newPlaylist.Title, existing.Token, newPlaylist.Payload)
+		if err != nil {
+			log.Println("Error creating playlist for user for spotify")
+			log.Println(err)
+			return util.InternalServerError(ctx, err)
+		}
+		return util.RequestOk(ctx, nil)
+	}
+
+	return nil
 }
