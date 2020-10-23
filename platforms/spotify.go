@@ -496,7 +496,7 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 		return types.Playlist{}, nil
 	}
 
-	log.Println("Tracks found for the playlist is: ", playlist)
+	// log.Println("Tracks found for the playlist is: ", playlist)
 	return playlist, nil
 }
 

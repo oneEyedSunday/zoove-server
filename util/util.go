@@ -124,6 +124,7 @@ func ParseJwtToken(value, secret string) (*types.Token, error) {
 	return tk, nil
 }
 
+// ExtractInfoMetadata extracts metadata from URL
 func ExtractInfoMetadata(rawURL string) (*types.ExtractedInfo, error) {
 	// rawURL := ctx.Query("track")
 	song, err := url.QueryUnescape(rawURL)
@@ -183,6 +184,9 @@ func ExtractInfoMetadata(rawURL string) (*types.ExtractedInfo, error) {
 		extracted.URL = fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID)
 		extracted.ID = spotifyID
 		extracted.Type = queryType
+	} else {
+		log.Println("Oops! doesnt seem to be a valid playlist or track URL")
+		extracted = &types.ExtractedInfo{}
 	}
 	return extracted, nil
 }
@@ -192,6 +196,7 @@ func EncryptRefreshToken(refreshToken string) {}
 
 // TODO: implement refresh token encryption
 
+// MakeRequest makes the http request and marshalls the output inside src
 func MakeRequest(url string, src interface{}) error {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	// log.Printf("The URL we're calling is: %#v\n", url)

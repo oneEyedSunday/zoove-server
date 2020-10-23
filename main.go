@@ -104,6 +104,11 @@ func (listener *SocketListener) GetTrackListener() {
 			listener.c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Error getting spotify single track"}`))
 			listener.c.Close()
 		}
+	} else {
+		log.Println("Oops! Not a valid host")
+		listener.c.WriteMessage(websocket.TextMessage, []byte(`{"desc":"Invalid host"}`))
+		listener.c.Close()
+		return
 	}
 	search := platforms.NewTrackToSearch(listener.trackMeta.Title, listener.trackMeta.Artistes[0], pool)
 	deezr, err := search.HostDeezerSearchTrack()
@@ -170,8 +175,8 @@ func (listener *SocketListener) GetPlaylistListener() {
 			if err.Error() == "Not Found" {
 				listener.playlistMeta = &types.Playlist{}
 			}
-			// TODO: try to handle whatever happens here
 		}
+
 		listener.playlistMeta = &deezerPl
 
 		for _, singleTrack := range listener.playlistMeta.Tracks {
@@ -183,9 +188,9 @@ func (listener *SocketListener) GetPlaylistListener() {
 				continue
 			}
 
-			listener.deezerTracks = append(listener.deezerTracks, listener.playlistMeta.Tracks...)
 			listener.spotifyTracks = append(listener.spotifyTracks, *spotifyTrack)
 		}
+		listener.deezerTracks = append(listener.deezerTracks, listener.playlistMeta.Tracks...)
 
 	} else if extracted.Host == util.HostSpotify {
 		spotifyPl, err := platforms.HostSpotifyFetchPlaylistTracks(extracted.ID, pool)
@@ -202,8 +207,8 @@ func (listener *SocketListener) GetPlaylistListener() {
 				continue
 			}
 			listener.deezerTracks = append(listener.deezerTracks, *deezerTrack)
-			listener.spotifyTracks = append(listener.spotifyTracks, listener.playlistMeta.Tracks...)
 		}
+		listener.spotifyTracks = append(listener.spotifyTracks, listener.playlistMeta.Tracks...)
 	}
 
 	conn := pool.Get()
