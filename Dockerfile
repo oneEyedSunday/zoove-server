@@ -5,7 +5,7 @@ WORKDIR /app
 RUN go get ./
 ENV PORT=8300
 ENV GOOS linux
-ENV DB_URL=postgres://omgaxiwlvnkpbs:3f5269f91782298c7480d21c745c69c5001bf14b25fb209cffda18025635df1b@ec2-54-246-85-151.eu-west-1.compute.amazonaws.com:5432/d317dve0k1sqiq
+ENV DB_URL=postgres://basdllifutmrll:ca95b7603b40f33ce7b1e96bc9c1a45e780d8bf2a5ddb92188eceb0b922c8ee3@ec2-3-218-75-21.compute-1.amazonaws.com:5432/d5qtve1t15va3j
 ENV DEEZER_APP_ID=422202
 ENV DEEZER_APP_SECRET=e39a5133a1ab818926e848e5695e644c
 ENV DEEZER_API_BASE=https://api.deezer.com

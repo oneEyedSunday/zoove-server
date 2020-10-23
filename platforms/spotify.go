@@ -464,7 +464,9 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 	}
 	playlist := types.Playlist{Description: spotifyPlaylist.Description,
 		Collaborative: spotifyPlaylist.Collaborative,
-		Owner:         types.PlaylistOwner{Avatar: avatar, ID: spotifyPlaylist.Owner.ID, Name: spotifyPlaylist.Name},
+		Title:         spotifyPlaylist.Name,
+		Owner: types.PlaylistOwner{Avatar: avatar, ID: spotifyPlaylist.Owner.ID,
+			Name: spotifyPlaylist.Name},
 	}
 	for _, single := range spotifyPlaylist.Tracks.Tracks {
 		durationMs += single.Track.Duration
@@ -493,6 +495,8 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 	if err != nil {
 		return types.Playlist{}, nil
 	}
+
+	log.Println("Tracks found for the playlist is: ", playlist)
 	return playlist, nil
 }
 

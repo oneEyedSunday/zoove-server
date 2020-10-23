@@ -152,10 +152,6 @@ func (listener *SocketListener) GetTrackListener() {
 	listener.c.Close()
 }
 
-// GetTrackListener runs all the stuff that gets the equivalents for tracks only
-func GetTrackListener(sk *SocketMessage, c *websocket.Conn, trackMeta *types.SingleTrack, deezerTracks []types.SingleTrack, spotifyTracks []types.SingleTrack, tracks [][]types.SingleTrack) {
-}
-
 // GetPlaylistListener returns the playlist listener
 func (listener *SocketListener) GetPlaylistListener() {
 	extracted, err := util.ExtractInfoMetadata(listener.deserialize.URL)
@@ -177,29 +173,37 @@ func (listener *SocketListener) GetPlaylistListener() {
 			// TODO: try to handle whatever happens here
 		}
 		listener.playlistMeta = &deezerPl
+
+		for _, singleTrack := range listener.playlistMeta.Tracks {
+			search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], pool)
+			go search.HostSpotifySearchTrackChan(spotifyChan)
+			spotifyTrack := <-spotifyChan
+
+			if spotifyTrack == nil {
+				continue
+			}
+
+			listener.deezerTracks = append(listener.deezerTracks, listener.playlistMeta.Tracks...)
+			listener.spotifyTracks = append(listener.spotifyTracks, *spotifyTrack)
+		}
+
 	} else if extracted.Host == util.HostSpotify {
 		spotifyPl, err := platforms.HostSpotifyFetchPlaylistTracks(extracted.ID, pool)
 		if err != nil {
 			log.Println("Error fetching spotify playlist tracks.")
 		}
 		listener.playlistMeta = &spotifyPl
-	}
 
-	for _, singleTrack := range listener.playlistMeta.Tracks {
-		search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], pool)
-		go search.HostDeezerSearchTrackChan(deezerChan)
-		deezerTrack := <-deezerChan
-		if deezerTrack == nil {
-			continue
+		for _, singleTrack := range listener.playlistMeta.Tracks {
+			search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], pool)
+			go search.HostDeezerSearchTrackChan(deezerChan)
+			deezerTrack := <-deezerChan
+			if deezerTrack == nil {
+				continue
+			}
+			listener.deezerTracks = append(listener.deezerTracks, *deezerTrack)
+			listener.spotifyTracks = append(listener.spotifyTracks, listener.playlistMeta.Tracks...)
 		}
-		go search.HostSpotifySearchTrackChan(spotifyChan)
-		spotifyTrack := <-spotifyChan
-		if spotifyTrack == nil {
-			continue
-		}
-
-		listener.deezerTracks = append(listener.deezerTracks, *deezerTrack)
-		listener.spotifyTracks = append(listener.spotifyTracks, *spotifyTrack)
 	}
 
 	conn := pool.Get()
@@ -221,6 +225,8 @@ func (listener *SocketListener) GetPlaylistListener() {
 	}
 	log.Printf("Number of search so far: %d\n", searchesCount)
 	listener.tracks = append(listener.tracks, listener.deezerTracks, listener.spotifyTracks)
+	// log.Println("All tracks now are: ", listener.tracks)
+	// log.Println("Plalyist meta is: ", listener.playlistMeta)
 	res := map[string]interface{}{
 		"playlist_title": listener.playlistMeta.Title,
 		"payload":        listener.tracks,
