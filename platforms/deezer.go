@@ -122,8 +122,8 @@ func (search *TrackToSearch) HostDeezerSearchTrack() (*types.SingleTrack, error)
 	// log.Printf("Output from deezer search%#v", output)
 	if len(output.Data) > 0 {
 		base := output.Data[0]
-		key := fmt.Sprintf("%s-%s", util.HostDeezer, string(base.ID))
-
+		key := fmt.Sprintf("%s-%s", util.HostDeezer, strconv.Itoa(base.ID))
+		log.Println("Result to search ", base)
 		if err != nil {
 			log.Println("Error getting from redis")
 			log.Println(err)
@@ -148,6 +148,7 @@ func (search *TrackToSearch) HostDeezerSearchTrack() (*types.SingleTrack, error)
 			Title:       base.Title,
 			URL:         base.Link,
 			ReleaseDate: "",
+			Album:       base.Album.Title,
 		}
 
 		return track, nil
@@ -376,6 +377,7 @@ func HostDeezerFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.P
 	playlist := &types.Playlist{Description: deezerPlaylist.Description, Collaborative: deezerPlaylist.Collaborative,
 		Duration: deezerPlaylist.Duration, TracksNumber: deezerPlaylist.NbTracks, Title: deezerPlaylist.Title,
 		Tracks: []types.SingleTrack{}, Owner: types.PlaylistOwner{Avatar: deezerPlaylist.Picture, ID: id, Name: deezerPlaylist.Creator.Name},
+		URL: deezerPlaylist.Link, Cover: deezerPlaylist.Picture,
 	}
 	for _, track := range deezerPlaylist.Tracks.Data {
 		dur := strconv.Itoa(track.Duration)

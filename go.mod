@@ -14,7 +14,7 @@ require (
 	github.com/joho/godotenv v1.3.0
 	github.com/jonahgeorge/force-ssl-heroku v1.0.1 // indirect
 	github.com/klauspost/compress v1.11.1 // indirect
-	github.com/prisma/prisma-client-go v0.0.9
+	github.com/prisma/prisma-client-go v0.1.0
 	github.com/savsgio/gotils v0.0.0-20200909101946-939aa3fc74fb // indirect
 	github.com/soveran/redisurl v0.0.0-20180322091936-eb325bc7a4b8
 	github.com/zmb3/spotify v0.0.0-20200814173021-9bec46940cc0

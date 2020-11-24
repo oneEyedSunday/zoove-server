@@ -165,7 +165,9 @@ func HostSpotifyReturnAuth(authcode string) (*oauth2.Token, error) {
 func HostSpotifyUserAuth(authcode string) (*spotify.PrivateUser, string, error) {
 	redirecURI := os.Getenv("spotifyRedirectURI")
 	token, err := HostSpotifyReturnAuth(authcode)
+	log.Println("Error returning spotify auth: ", err)
 	if err != nil {
+		// panic(err)
 		return nil, "", err
 	}
 
@@ -179,6 +181,7 @@ func HostSpotifyUserAuth(authcode string) (*spotify.PrivateUser, string, error) 
 	client := auth.NewClient(token)
 	user, err := client.CurrentUser()
 	if err != nil {
+		// panic(err)
 		return nil, "", err
 	}
 
@@ -272,6 +275,7 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 				ReleaseDate: sptf.Album.ReleaseDate,
 				Title:       sptf.Name,
 				URL:         sptf.ExternalUrls.Spotify,
+				Album:       sptf.Album.Name,
 			}
 			for _, elem := range sptf.Artists {
 				single.Artistes = append(single.Artistes, elem.Name)
@@ -467,6 +471,8 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 		Title:         spotifyPlaylist.Name,
 		Owner: types.PlaylistOwner{Avatar: avatar, ID: spotifyPlaylist.Owner.ID,
 			Name: spotifyPlaylist.Name},
+		URL:   spotifyPlaylist.ExternalURLs["spotify"],
+		Cover: spotifyPlaylist.Images[0].URL,
 	}
 	for _, single := range spotifyPlaylist.Tracks.Tracks {
 		durationMs += single.Track.Duration

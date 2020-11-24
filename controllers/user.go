@@ -81,6 +81,8 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 	randomid := rnid.String()
 	platform := strings.ToLower(ctx.Params("platform"))
 	authcode := ctx.Query("code")
+
+	log.Println("Platform is: and the code is: ", platform, authcode)
 	if platform == util.HostDeezer {
 		token, err := platforms.HostDeezerUserAuth(authcode)
 		if err != nil {
@@ -152,6 +154,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 				encToken := base64.StdEncoding.EncodeToString([]byte(signedJWT))
 				redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
 				return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
+				// return ctx.Status(http.StatusOK).JSON(redirectURL)
 			}
 		}
 
@@ -172,12 +175,15 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 		encToken := base64.StdEncoding.EncodeToString([]byte(signedJwt))
 		redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
 		return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
-
+		// return ctx.Status(http.StatusOK).JSON(redirectURL)
 	} else if platform == util.HostSpotify {
 		spotify, refreshToken, err := platforms.HostSpotifyUserAuth(authcode)
+		log.Println("Error with spotify auth: ", err)
+		log.Println("Here is the spotify user auth: ", spotify, refreshToken)
 		if err != nil {
 			log.Println("Error getting user")
 			log.Println(err)
+			// panic(err)
 			return util.InternalServerError(ctx, err)
 		}
 		claims := &types.Token{
@@ -227,6 +233,8 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 				encToken := base64.StdEncoding.EncodeToString([]byte(signedJwt))
 				redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
 				return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
+				// util.RequestOk(ctx, encToken)
+				// return ctx.Status(http.StatusOK).JSON(redirectURL)
 			}
 		}
 		// update here with new token
@@ -246,6 +254,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 		encToken := base64.StdEncoding.EncodeToString([]byte(signedJwt))
 		redirectURL := fmt.Sprintf("%s?kyn=%s", clientURL, encToken)
 		return ctx.Redirect(redirectURL, http.StatusTemporaryRedirect)
+		// return ctx.Status(http.StatusOK).JSON(redirectURL)
 	}
 	return util.NotImplementedError(ctx, nil)
 }

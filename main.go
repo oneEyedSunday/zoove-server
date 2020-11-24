@@ -144,6 +144,7 @@ func (listener *SocketListener) GetTrackListener() {
 		log.Println("Error incrementing redis key")
 	}
 	log.Printf("Number of search so far: %d\n", searchesCount)
+	deezr.ReleaseDate = spot.ReleaseDate
 	listener.deezerTracks = append(listener.deezerTracks, *deezr)
 	listener.spotifyTracks = append(listener.spotifyTracks, *spot)
 	listener.tracks = append(listener.tracks, listener.spotifyTracks, listener.deezerTracks)
@@ -235,7 +236,14 @@ func (listener *SocketListener) GetPlaylistListener() {
 	res := map[string]interface{}{
 		"playlist_title": listener.playlistMeta.Title,
 		"payload":        listener.tracks,
+		"owner":          listener.playlistMeta.Owner,
+		"playlist_meta":  listener.playlistMeta,
+		"platforms": map[string]interface{}{
+			"spotify": listener.spotifyTracks,
+			"deezer":  listener.deezerTracks,
+		},
 	}
+
 	listener.c.WriteJSON(res)
 	listener.deezerTracks = nil
 	listener.spotifyTracks = nil

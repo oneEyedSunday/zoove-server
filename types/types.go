@@ -13,12 +13,13 @@ type SingleTrack struct {
 	URL         string   `json:"url"`
 	Preview     string   `json:"preview"`
 	Cover       string   `json:"cover"`
-	ReleaseDate string   `json:"release_date"`
+	ReleaseDate string   `json:"release_date,omitempty"`
 	Explicit    bool     `json:"explicit"`
 	Platform    string   `json:"platform"`
 	ID          string   `json:"id"`
 	PlayedAt    string   `json:"played_at,omitempty"` // this is because this struct is also used for the single listening history object which contains (and needs) a "when was it played" body which is this.
 	AddedAt     string   `json:"added_at,omitempty"`  // similar situation above but in this case, its for Playlists. To know when a track was added to a playlist.
+	Album       string   `json:"album,omitempty"`
 }
 type Playlist struct {
 	Title         string        `json:"title"`
@@ -28,6 +29,8 @@ type Playlist struct {
 	TracksNumber  int           `json:"tracks_number"`
 	Owner         PlaylistOwner `json:"owner"`
 	Tracks        []SingleTrack `json:"tracks"`
+	URL           string        `json:"playlist_url"`
+	Cover         string        `json:"playlist_cover"`
 }
 
 type HostSpotifyCreatePlaylist struct {
