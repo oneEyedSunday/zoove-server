@@ -63,11 +63,10 @@ func loadListeners() {
 		select {
 		case <-register:
 		}
-
 	}
 }
 
-// SocketListener represents a "class" for a typical listenerdfkdfjkefd
+// SocketListener represents a "blueprint" for a typical listener
 type SocketListener struct {
 	deserialize   SocketMessage
 	c             *websocket.Conn
@@ -191,6 +190,7 @@ func (listener *SocketListener) GetPlaylistListener() {
 
 			listener.spotifyTracks = append(listener.spotifyTracks, *spotifyTrack)
 		}
+
 		listener.deezerTracks = append(listener.deezerTracks, listener.playlistMeta.Tracks...)
 
 	} else if extracted.Host == util.HostSpotify {
@@ -230,6 +230,9 @@ func (listener *SocketListener) GetPlaylistListener() {
 		log.Println("Error incrementing redis key")
 	}
 	log.Printf("Number of search so far: %d\n", searchesCount)
+	for index, single := range listener.deezerTracks {
+		single.ReleaseDate = listener.spotifyTracks[index].ReleaseDate
+	}
 	listener.tracks = append(listener.tracks, listener.deezerTracks, listener.spotifyTracks)
 	// log.Println("All tracks now are: ", listener.tracks)
 	// log.Println("Plalyist meta is: ", listener.playlistMeta)

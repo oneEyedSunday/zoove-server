@@ -66,7 +66,7 @@ func (search *TrackToSearch) HostDeezerSearchTrackChan(ch chan *types.SingleTrac
 	// log.Printf("Output from deezer search%#v", output)
 	if len(output.Data) > 0 {
 		base := output.Data[0]
-		key := fmt.Sprintf("%s-%s", util.HostDeezer, string(base.ID))
+		key := fmt.Sprintf("%s-%s", util.HostDeezer, strconv.Itoa(base.ID))
 
 		if err != nil {
 			log.Println("Error getting from redis")
@@ -92,6 +92,7 @@ func (search *TrackToSearch) HostDeezerSearchTrackChan(ch chan *types.SingleTrac
 			Title:       base.Title,
 			URL:         base.Link,
 			ReleaseDate: "",
+			Album:       base.Album.Title,
 		}
 
 		// return track, nil
@@ -137,6 +138,7 @@ func (search *TrackToSearch) HostDeezerSearchTrack() (*types.SingleTrack, error)
 		}
 
 		id := strconv.Itoa(base.ID)
+		log.Println("Single ")
 		track := &types.SingleTrack{
 			Cover:       base.Album.Cover,
 			Artistes:    []string{base.Artist.Name},
@@ -340,6 +342,7 @@ func HostDeezerFetchHistory(token string) ([]types.SingleTrack, error) {
 	return histr, nil
 }
 
+// HostDeezerFetchArtisteHistory returns the artistes listening history of a user.
 func HostDeezerFetchArtisteHistory(token string) ([]string, error) {
 	hist, err := HostDeezerFetchHistory(token)
 	if err != nil {

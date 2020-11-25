@@ -487,6 +487,7 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 			URL:         single.Track.Endpoint,
 			ReleaseDate: single.Track.Album.ReleaseDate,
 			Preview:     single.Track.PreviewURL,
+			Album:       single.Track.Album.Name,
 		}
 		for _, r := range single.Track.Artists {
 			singleT.Artistes = append(singleT.Artistes, r.Name)
