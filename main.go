@@ -109,7 +109,11 @@ func (listener *SocketListener) GetTrackListener() {
 		listener.c.Close()
 		return
 	}
-	search := platforms.NewTrackToSearch(listener.trackMeta.Title, listener.trackMeta.Artistes[0], pool)
+	artiste := ""
+	if len(listener.trackMeta.Artistes) > 0 {
+		artiste = listener.trackMeta.Artistes[0]
+	}
+	search := platforms.NewTrackToSearch(listener.trackMeta.Title, artiste, pool)
 	deezr, err := search.HostDeezerSearchTrack()
 	if err != nil {
 		log.Println("Error searching deezer")
@@ -230,9 +234,21 @@ func (listener *SocketListener) GetPlaylistListener() {
 		log.Println("Error incrementing redis key")
 	}
 	log.Printf("Number of search so far: %d\n", searchesCount)
+
+	diff := 0
+	if len(listener.deezerTracks) > len(listener.spotifyTracks) {
+		diff = len(listener.deezerTracks) - len(listener.spotifyTracks)
+		listener.deezerTracks = listener.deezerTracks[:len(listener.deezerTracks)-diff]
+	} else if len(listener.spotifyTracks) > len(listener.deezerTracks) {
+		diff = len(listener.spotifyTracks) - len(listener.spotifyTracks)
+		listener.spotifyTracks = listener.spotifyTracks[:len(listener.spotifyTracks)-diff]
+	}
+
 	for index, single := range listener.deezerTracks {
 		single.ReleaseDate = listener.spotifyTracks[index].ReleaseDate
 	}
+
+	log.Println("Final deezer tracks are: ", listener.deezerTracks)
 	listener.tracks = append(listener.tracks, listener.deezerTracks, listener.spotifyTracks)
 	// log.Println("All tracks now are: ", listener.tracks)
 	// log.Println("Plalyist meta is: ", listener.playlistMeta)
