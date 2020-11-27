@@ -476,9 +476,13 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 	}
 	for _, single := range spotifyPlaylist.Tracks.Tracks {
 		durationMs += single.Track.Duration
+		img := ""
+		if len(single.Track.Album.Images) > 0 {
+			img = single.Track.Album.Images[0].URL
+		}
 		singleT := &types.SingleTrack{
 			AddedAt:     single.AddedAt,
-			Cover:       single.Track.Album.Images[0].URL,
+			Cover:       img,
 			Duration:    single.Track.Duration,
 			Explicit:    single.Track.Explicit,
 			ID:          single.Track.ID.String(),

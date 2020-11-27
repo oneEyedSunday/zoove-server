@@ -207,7 +207,12 @@ func (listener *SocketListener) GetPlaylistListener() {
 		listener.playlistMeta = &spotifyPl
 
 		for _, singleTrack := range listener.playlistMeta.Tracks {
-			search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], pool)
+			artiste := ""
+			if len(singleTrack.Artistes) > 0 {
+				artiste = singleTrack.Artistes[0]
+			}
+
+			search := platforms.NewTrackToSearch(singleTrack.Title, artiste, pool)
 			go search.HostDeezerSearchTrackChan(deezerChan)
 			deezerTrack := <-deezerChan
 			if deezerTrack == nil {
