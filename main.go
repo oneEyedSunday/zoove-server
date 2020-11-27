@@ -80,7 +80,7 @@ type SocketListener struct {
 
 // GetTrackListener listens for tracks action
 func (listener *SocketListener) GetTrackListener() {
-
+	// log.Println("Deserialized extracted URL (TRACK) is: ", listener.deserialize.URL)
 	extracted, err := util.ExtractInfoMetadata(listener.deserialize.URL)
 	if err != nil {
 		log.Println("Error extracting")
@@ -117,6 +117,7 @@ func (listener *SocketListener) GetTrackListener() {
 	deezr, err := search.HostDeezerSearchTrack()
 	if err != nil {
 		log.Println("Error searching deezer")
+		// log.Println("Error is: ", err)
 		// TODO: try to handle whatever happens here
 		deezr = &types.SingleTrack{}
 	}
@@ -163,6 +164,7 @@ func (listener *SocketListener) GetTrackListener() {
 
 // GetPlaylistListener returns the playlist listener
 func (listener *SocketListener) GetPlaylistListener() {
+	// log.Println("Deserialized extracted URL (playlist) is: ", listener.deserialize.URL)
 	extracted, err := util.ExtractInfoMetadata(listener.deserialize.URL)
 	if err != nil {
 		log.Println("Error extracting")

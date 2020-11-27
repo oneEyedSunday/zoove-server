@@ -372,6 +372,7 @@ func HostDeezerFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.P
 	deezerBaseAPI := os.Getenv("DEEZER_API_BASE")
 	url := fmt.Sprintf("%s/playlist/%s", deezerBaseAPI, playlistID)
 
+	// log.Println("URL to get deezer playlist is: ", url)
 	err := MakeDeezerRequest(url, deezerPlaylist)
 	if err != nil {
 		return types.Playlist{}, err
