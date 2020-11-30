@@ -407,7 +407,7 @@ func main() {
 	}))
 	app.Get("/:platform/signup", userHandler.SignupRedirect)
 	app.Get("/deezer/verify", userHandler.VerifyDeezerSignup)
-	app.Get("/:platform/oauth", userHandler.AuthorizeUser)
+	app.Get("/kanye/:platform/oauth", userHandler.AuthorizeUser)
 	app.Post("/api/v1.1/user/join", userHandler.AddNewUser)
 	app.Use(middleware.ExtractedInfoMiddleware)
 	app.Get("/api/v1.1/search", jaeger.JaegerHandler)
