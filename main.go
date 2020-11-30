@@ -317,6 +317,7 @@ func main() {
 
 	app.Use(cors.New(cors.Config{
 		AllowMethods: fmt.Sprintf("%s,%s,%s,%s,%s", http.MethodGet, http.MethodPatch, http.MethodPost, http.MethodOptions, http.MethodDelete),
+		AllowOrigins: "*",
 	}))
 
 	type Sample struct {
