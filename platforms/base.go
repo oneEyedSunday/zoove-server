@@ -34,7 +34,7 @@ func AuthorizeUser(ctx *fiber.Ctx) {
 		authcode := ctx.Query("code")
 		token, err := HostDeezerUserAuth(authcode)
 		if err != nil {
-			log.Println("Error authenticating using on deezer")
+			// log.Println("Error authenticating using on deezer")
 			log.Println(err)
 			ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{"message": "Error Authing user", "error": err.Error(), "status": http.StatusInternalServerError})
 			return
