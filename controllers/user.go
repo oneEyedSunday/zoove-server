@@ -82,11 +82,11 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 	platform := strings.ToLower(ctx.Params("platform"))
 	authcode := ctx.Query("code")
 
-	log.Println("Platform is: and the code is: ", platform, authcode)
+	// log.Println("Platform is: and the code is: ", platform, authcode)
 	if platform == util.HostDeezer {
 		token, err := platforms.HostDeezerUserAuth(authcode)
 		if err != nil {
-			log.Println("Error authenticating using on deezer")
+			// log.Println("Error authenticating using on deezer")
 			log.Println(err)
 			return ctx.Status(http.StatusInternalServerError).JSON(fiber.Map{"message": "Error Authing user", "error": err.Error(), "status": http.StatusInternalServerError})
 		}
