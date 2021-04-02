@@ -29,18 +29,24 @@ type AuthenticateMiddleware struct {
 }
 
 func (auth *AuthenticateMiddleware) AuthenticateUser(ctx *fiber.Ctx) error {
-	ten := ctx.Locals("user").(*jwt.Token)
+	ten := ctx.Locals("token").(*jwt.Token)
 	claims := ten.Claims.(*types.Token)
 	ccx := context.TODO()
 	user, err := auth.DB.User.FindOne(db.User.UUID.Equals(claims.UUID)).Exec(ccx)
 	if err != nil {
 		if err == db.ErrNotFound {
 			log.Println("User with that UUID doesnt exist")
+			if claims.Role != string(db.RoleUSER) {
+				log.Printf("It seems this is an API key and the role is %s\n", claims.Role)
+				ctx.Locals("key_role", claims.Role)
+				return ctx.Next()
+			}
 			return ctx.Status(http.StatusNotFound).JSON(fiber.Map{"message": "User not found", "error": err})
 		}
 	}
 
 	ctx.Locals("uuid", user.UUID)
+	ctx.Locals("key_role", user.Role)
 	return ctx.Next()
 }
 

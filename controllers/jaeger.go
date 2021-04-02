@@ -42,7 +42,7 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 	platforms.
 	==> Get track info
 	==> Pass the track info into (lets say) Spotify
-	==> SPotiy also gets the track. (but in this case, it uses search since we dont know the ID of the song on Spotify)
+	==> Spotify also gets the track. (but in this case, it uses search since we dont know the ID of the song on Spotify)
 	==> Deezer and Spotify both put their values in an array.
 	==> Array is returned.
 	==> If Spotify doesnt have it, return 404. Return null (nil) for the Spotify response.
@@ -94,7 +94,7 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 		}
 		// this is because spotify always has release date. but now, remember that we're currently
 		// checking if track has been cached. We're still leaving this 'cos its caching our calls
-		// right now. and thats what we need. but since relasedate real value can be gotten here, simply
+		// right now. and thats what we need. but since release date real value can be gotten here, simply
 		// using the value here.
 		deez.ReleaseDate = track.ReleaseDate
 		// tracks = append(tracks, track, deez)

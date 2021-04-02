@@ -67,12 +67,18 @@ func NotImplementedError(ctx *fiber.Ctx, err error) error {
 	return ctx.Status(http.StatusNotImplemented).JSON(fiber.Map{"message": "Not yet implemented", "error": err, "status": http.StatusNotImplemented, "data": nil})
 }
 
+// RequestForbidden returns a forbidden error
+func RequestForbidden(ctx *fiber.Ctx, err error) error {
+	return ctx.Status(http.StatusForbidden).JSON(fiber.Map{"message": "This request is forbidden", "error": err, "status": http.StatusForbidden})
+}
+
 // SignJwtToken signs the token that is returned for a user
 func SignJwtToken(claims *types.Token, secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &types.Token{
 		PlatformToken: claims.PlatformToken,
 		Platform:      claims.Platform,
 		UUID:          claims.UUID,
+		Role:          claims.Role,
 		PlatformID:    claims.PlatformID,
 		// StandardClaims: jwt.StandardClaims{ExpiresAt: time.Now().Add(time.Minute * 3).Unix()},
 	})
@@ -84,6 +90,8 @@ func SignJwtToken(claims *types.Token, secret string) (string, error) {
 	return tokenString, nil
 }
 
+// func SignAccessToken(claims *types.Token, secret)
+
 // SignJwtTokenExp signs the token that is returned for a user but sets the expiration to 5 mins
 func SignJwtTokenExp(claims *types.Token, secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &types.Token{
@@ -91,7 +99,8 @@ func SignJwtTokenExp(claims *types.Token, secret string) (string, error) {
 		Platform:       claims.Platform,
 		UUID:           claims.UUID,
 		PlatformID:     claims.PlatformID,
-		StandardClaims: jwt.StandardClaims{ExpiresAt: time.Now().Add(time.Minute * 5).Unix()},
+		Role:           claims.Role,
+		StandardClaims: jwt.StandardClaims{ExpiresAt: time.Now().Add(time.Minute * 30).Unix()},
 	})
 
 	tokenString, err := token.SignedString([]byte(secret))

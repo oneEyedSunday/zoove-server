@@ -392,6 +392,7 @@ type Token struct {
 	Platform      string
 	PlatformID    string
 	PlatformToken string
+	Role          string
 	UUID          string
 }
 

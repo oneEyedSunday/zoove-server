@@ -151,6 +151,7 @@ func HostSpotifyReturnAuth(authcode string) (*oauth2.Token, error) {
 		return nil, types.UnAuthorizedScope
 	}
 
+	log.Println("Spotify track search is: ", string(body))
 	err = json.Unmarshal(body, res)
 	if err != nil {
 		log.Fatalln(err)

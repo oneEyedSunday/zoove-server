@@ -139,6 +139,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					db.User.Token.Set(token), // T0DO: ENCRYPT THIS..
 					db.User.Plan.Set(plan),
 					db.User.PlatformID.Set(uid),
+					db.User.Role.Set(db.RoleUSER),
 				).Exec(context.Background())
 				if err != nil {
 					log.Println("Error saving new user")
@@ -221,6 +222,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					db.User.Token.Set(refreshToken),
 					db.User.Plan.Set(spotify.Product),
 					db.User.PlatformID.Set(spotify.ID),
+					db.User.Role.Set(db.RoleUSER),
 				).Exec(context.Background())
 
 				if err != nil {
@@ -423,6 +425,7 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 				db.User.Token.Set(newUser.Token),
 				db.User.Plan.Set(newUser.Plan),
 				db.User.PlatformID.Set(newUser.PlatformID),
+				db.User.Role.Set(db.RoleUSER),
 				db.User.CreatedAt.Set(time.Now()),
 			).Exec(context.Background())
 			if err != nil {

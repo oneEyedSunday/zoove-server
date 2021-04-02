@@ -5,7 +5,7 @@ go 1.14
 require (
 	github.com/andybalholm/brotli v1.0.1 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/fasthttp/websocket v1.4.3 // indirect
+	github.com/fasthttp/websocket v1.4.3
 	github.com/gofiber/fiber/v2 v2.0.6
 	github.com/gofiber/jwt/v2 v2.0.0
 	github.com/gofiber/websocket/v2 v2.0.1

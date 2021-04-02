@@ -25,4 +25,19 @@ model User {
   token      String
   plan       String
   platformId String   @unique
+  Role       Role
+}
+
+model Developer {
+  id Int @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  Email String
+  Role Role
+}
+
+enum Role {
+  USER
+  DEVELOPER
+  ADMIN
 }

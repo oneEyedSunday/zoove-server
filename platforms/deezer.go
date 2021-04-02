@@ -208,6 +208,17 @@ func HostDeezerGetSingleTrackChan(deezerID string, pool *redis.Pool, ch chan *ty
 
 // HostDeezerGetSingleTrack returns a single deezer track (DOING THE CACHING)
 func HostDeezerGetSingleTrack(deezerID string, pool *redis.Pool) (*types.SingleTrack, error) {
+	// pool = &redis.Pool{
+	// 	Dial: func() (redis.Conn, error) {
+	// 		log.Println(os.Getenv("REDIS_URL"))
+	// 		redisConnect, err := redisurl.Connect()
+	// 		if err != nil {
+	// 			log.Println("Error with redis connection something something here", err)
+	// 		}
+	// 		return redisConnect, err
+	// 	},
+	// }
+
 	conn := pool.Get()
 	defer conn.Close()
 
