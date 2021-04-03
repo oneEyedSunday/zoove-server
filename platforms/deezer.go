@@ -266,7 +266,8 @@ func HostDeezerGetSingleTrack(deezerID string, pool *redis.Pool) (*types.SingleT
 // MakeDeezerRequest makes an http request to deezer
 func MakeDeezerRequest(url string, out interface{}) error {
 	log.Printf("Deezer UEL is: %s", url)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	delimitedURL := strings.Replace(url, "\n", "", -1)
+	req, err := http.NewRequest(http.MethodGet, delimitedURL, nil)
 	if err != nil {
 		log.Println("Error creating new HTTP request")
 		log.Println(err)
