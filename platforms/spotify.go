@@ -32,12 +32,64 @@ func (search *TrackToSearch) HostSpotifySearchTrackChan(ch chan *types.SingleTra
 	payload := url.QueryEscape(fmt.Sprintf("track:%s artist:%s", search.Title, search.Artiste))
 	searchURL := fmt.Sprintf("%s/v1/search?q=%s&type=track", os.Getenv("SPOTIFY_API_BASE"), payload)
 	output := &types.HostSpotifySearchTrack{}
-	token, err := GetSpotifyAuthToken()
+	// first get the token from the cache. if it exists, then use. if not, make a request to that effect
+	// that in theory should prevent the issue we're having
+	// values, err := redis.String(conn.Do("GET", key))
+	search.Pool = &redis.Pool{
+		Dial: func() (redis.Conn, error) {
+			// log.Println(os.Getenv("REDIS_URL"))
+			return redisurl.Connect()
+		},
+	}
+	conn := search.Pool.Get()
+	defer conn.Close()
+	cachedToken, err := redis.String(conn.Do("GET", "spotify__token"))
+	var token *oauth2.Token
 	if err != nil {
+		if err == redis.ErrNil {
+			log.Println("[WARNING]: No spotify token in the cache")
+			token, tokenErr := GetSpotifyAuthToken()
+			if tokenErr != nil {
+				log.Println("[ERROR]: Error fetching spotify auth")
+				log.Println(err)
+				ch <- nil
+				return
+			}
+
+			if token != nil {
+				// save it into the cache.
+				serializedToken, err := json.Marshal(token)
+				if err != nil {
+					log.Printf("========================================================\n")
+					log.Println("[ERROR:] -> Error serializing spotify access token")
+					log.Println(err)
+					log.Printf("========================================================\n")
+				}
+				_, err = redis.String(conn.Do("SET", "spotify__token", string(serializedToken)))
+				if err != nil {
+					// just log. not handling this error as its none crucial. users dont care it doesnt impact them
+					log.Println("Error inserting into redis")
+					log.Println(err)
+				}
+				_, err = redis.Int64(conn.Do("EXPIRE", "spotify__token", 60))
+				if err != nil {
+					log.Println("REDIS EXPIRE KEY ERROR", err)
+				}
+			}
+			log.Println("Generated token is >> ", token)
+		}
+	}
+
+	token = &oauth2.Token{}
+	err = json.Unmarshal([]byte(cachedToken), token)
+	// token, err := GetSpotifyAuthToken()
+	if err != nil {
+		log.Println("Error fetching spotify auth token", err)
 		// return nil, err
 		ch <- nil
 	}
 
+	log.Printf("Here is the spotify track to search:: %s and token is %s and others is: %v\n", searchURL, token.AccessToken, output)
 	err = MakeSpotifyRequest(searchURL, token.AccessToken, output)
 	if err != nil {
 		// return nil, err
@@ -393,6 +445,7 @@ func GetSpotifyAuthToken() (*oauth2.Token, error) {
 
 	client := &http.Client{}
 	url := fmt.Sprintf("%s/api/token", spotifyAuthBaseURL)
+
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(reqBody.Encode()))
 	if err != nil {
 		log.Fatalf("Error with spotify auth")
@@ -414,13 +467,19 @@ func GetSpotifyAuthToken() (*oauth2.Token, error) {
 	defer doRequest.Body.Close()
 	out := &oauth2.Token{}
 
-	err = json.Unmarshal(body, out)
-	if err != nil {
+	if doRequest.StatusCode >= 400 {
+		log.Println("[ERROR:] -> ERROR GETTING ACCESS TOKEN FROM SPOTIFY. THE STATUSCODE IS NOT 2XX")
 		return nil, err
 	}
+	// log.Printf("\n\n[SPOTIFY] RESPONSE BODY %s\n\n", string(body))
+	// log.Println("http response is: ", doRequest.Status)
 
+	err = json.Unmarshal(body, out)
+	if err != nil {
+		log.Printf("\n\n[SPOTIFY]: SPOTIFY REQUEST err IS: %s \n\n", err)
+		return nil, err
+	}
 	return out, nil
-
 }
 
 // HostSpotifyFetchArtisteHistory returns the artistes user has listened to recently
@@ -515,7 +574,14 @@ func HostSpotifyFetchPlaylistTracks(playlistID string, pool *redis.Pool) (types.
 // HostSpotifyCreatePlaylist creates a playlist with tracks for a user
 func HostSpotifyCreatePlaylist(spotifyID, title, token string, tracks []string) error {
 	spotifyAPIBase := os.Getenv("SPOTIFY_API_BASE")
-
+	// get a new access token to use.
+	// accessToken, err := util.FetchSpotifyAccessToken()
+	// if err != nil {
+	// 	log.Println("Error fetching token from spotify", err)
+	// 	return err
+	// }
+	log.Println("Access Token from spotify is", token)
+	log.Printf("\n\n User spotify ID is: %s\n\n", spotifyID)
 	url := fmt.Sprintf("%s/v1/users/%s/playlists", spotifyAPIBase, spotifyID)
 	createdPlaylist := &types.HostSpotifyNewPlaylistCreationResponse{}
 	playlist := types.HostSpotifyCreatePlaylist{Name: title}
@@ -559,8 +625,9 @@ func HostSpotifyCreatePlaylist(spotifyID, title, token string, tracks []string) 
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
+	log.Printf("\n\nAuthorization token thing is\n\n: %s", req.Header)
 	err = ExecuteRequest(req, spotifyPlaylist)
 	if err != nil {
 		return err
@@ -584,6 +651,7 @@ func ExecuteRequest(req *http.Request, result interface{}) error {
 		log.Println("DOes not have permission to perform that action")
 		return types.UnAuthorizedScope
 	}
+	log.Printf("\n\nSpotify execute request body is: %s\n\n", string(out))
 	err = json.NewDecoder(bytes.NewReader(out)).Decode(result)
 	if err != nil {
 		log.Println("Error deserializing body in JSON Decoder")
@@ -597,7 +665,7 @@ func MakeSpotifyRequest(url, token string, out interface{}) error {
 	// log.Printf("URL is: %s", url)
 	// log.Printf("Token is: %s", token)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	if err != nil {
 		return err
 	}

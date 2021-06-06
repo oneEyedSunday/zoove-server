@@ -428,7 +428,7 @@ func HostDeezerCreatePlaylist(title, userid, token string, tracks []string) erro
 
 	allTracks := strings.Join(tracks, ",")
 	playlistURL := fmt.Sprintf("%s/playlist/%d/tracks?access_token=%s&request_method=post&songs=%s", deezerAPIBase, src.ID, token, allTracks)
-	err = util.MakeRequest(playlistURL, true)
+	err = util.MakeRequest(playlistURL, nil)
 
 	if err != nil {
 		log.Println("Error  making request to add tracks to playlist")

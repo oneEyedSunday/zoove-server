@@ -138,6 +138,16 @@ func (listener *SocketListener) GetTrackListener() {
 
 // GetPlaylistListener returns the playlist listener
 func (listener *SocketListener) GetPlaylistListener() {
+	pool = &redis.Pool{
+		Dial: func() (redis.Conn, error) {
+			log.Println(os.Getenv("REDIS_URL"))
+			redisConnect, err := redisurl.Connect()
+			if err != nil {
+				log.Println("Error with redis connection something something here", err)
+			}
+			return redisConnect, err
+		},
+	}
 	// log.Println("Deserialized extracted URL (playlist) is: ", listener.deserialize.URL)
 	extracted, err := util.ExtractInfoMetadata(listener.Deserialize.URL)
 	if err != nil {
@@ -161,6 +171,8 @@ func (listener *SocketListener) GetPlaylistListener() {
 
 		for _, singleTrack := range listener.PlaylistMeta.Tracks {
 			search := platforms.NewTrackToSearch(singleTrack.Title, singleTrack.Artistes[0], pool)
+			log.Printf("TRACKS UNDER THE PLATFORMS: %v\n\n", search)
+			log.Printf("COUNT OF ACTIVE POOL CONNECTION IS: %d \n\n", pool.ActiveCount())
 			go search.HostSpotifySearchTrackChan(spotifyChan)
 			spotifyTrack := <-spotifyChan
 
@@ -253,9 +265,19 @@ func (listener *SocketListener) GetPlaylistListener() {
 
 // CreatePlaylistListener creates a playlist for a user.
 func (listener *SocketListener) CreatePlaylistListener() {
-	existing, _ := listener.Client.User.FindOne(db.User.PlatformID.Equals(listener.Deserialize.UserID)).Exec(context.Background())
-	go platforms.CreatePlaylistChan(existing.PlatformID, listener.Deserialize.Payload.Title,
-		existing.Token, listener.Deserialize.Payload.Platform, listener.Deserialize.Payload.Tracks,
+
+	existing, _ := listener.Client.User.FindFirst(db.User.UUID.Equals(listener.Deserialize.UserID)).Exec(context.Background())
+	log.Printf("\n\nEXISTING USER GOTTEN IS: %v\n\n", existing)
+	log.Printf("\n\nPlatform is: %v\n\n", listener.Deserialize.Payload)
+	userID := ""
+	if listener.Deserialize.Payload.Platform == "spotify" {
+		userID = existing.SpotifyID
+	} else {
+		userID = existing.DeezerID
+	}
+
+	go platforms.CreatePlaylistChan(userID, listener.Deserialize.Payload.Title,
+		string(existing.Token), listener.Deserialize.Payload.Platform, listener.Deserialize.Payload.Tracks,
 		createPlaylistChan)
 	_ = <-createPlaylistChan
 	res := map[string]interface{}{

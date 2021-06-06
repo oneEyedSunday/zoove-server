@@ -11,13 +11,18 @@ require (
 	github.com/gofiber/websocket/v2 v2.0.1
 	github.com/gomodule/redigo v1.8.2
 	github.com/google/uuid v1.1.2
+	github.com/iancoleman/strcase v0.0.0-20190422225806-e506e3ef7365 // indirect
 	github.com/joho/godotenv v1.3.0
 	github.com/jonahgeorge/force-ssl-heroku v1.0.1 // indirect
 	github.com/klauspost/compress v1.11.1 // indirect
-	github.com/prisma/prisma-client-go v0.1.0
+	github.com/prisma/prisma-client-go v0.9.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20200909101946-939aa3fc74fb // indirect
+	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/soveran/redisurl v0.0.0-20180322091936-eb325bc7a4b8
+	github.com/takuoki/gocase v1.0.0 // indirect
 	github.com/zmb3/spotify v0.0.0-20200814173021-9bec46940cc0
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	golang.org/x/sys v0.0.0-20201022201747-fb209a7c41cd // indirect
 )
+
+replace github.com/prisma/prisma-client-go => /Users/ayodele/Desktop/open-src/prisma-client-go

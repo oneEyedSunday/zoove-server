@@ -50,7 +50,7 @@ func (user *User) VerifyDeezerSignup(ctx *fiber.Ctx) error {
 		return util.RequestUnAuthorized(ctx, err)
 	}
 	// check if this user exists
-	existing, err := user.DB.User.FindOne(db.User.UUID.Equals(prs.UUID)).Exec(context.Background())
+	existing, err := user.DB.User.FindFirst(db.User.UUID.Equals(prs.UUID)).Exec(context.Background())
 	if err != nil {
 		log.Printf("[ERROR]: Could not find user. User does not exist: %#v\n", err)
 		return util.NotFound(ctx)
@@ -85,6 +85,14 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 	// log.Println("Platform is: and the code is: ", platform, authcode)
 	if platform == util.HostDeezer {
 		token, err := platforms.HostDeezerUserAuth(authcode)
+		// now, create secret key
+		secretKey := os.Getenv("SECRET_ENCRYPTION_KEY")
+		encryptedToken, err := util.Encrypt([]byte(token), []byte(secretKey))
+		if err != nil {
+			log.Println("Error encrypting Deezer access token")
+			return util.InternalServerError(ctx, err)
+		}
+
 		if err != nil {
 			// log.Println("Error authenticating using on deezer")
 			log.Println(err)
@@ -107,7 +115,8 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 			UUID:          randomid,
 		}
 
-		existing, err := user.DB.User.FindOne(db.User.Email.Equals(profile.Email)).Exec(context.Background())
+		existing, err := user.DB.User.FindFirst(db.User.Email.Equals(profile.Email)).Exec(context.Background())
+		log.Println("Existing user found is", existing)
 		if err != nil {
 			if err == db.ErrNotFound {
 				signedJWT, err := util.SignJwtTokenExp(claims, os.Getenv("JWT_SECRET"))
@@ -134,12 +143,15 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					db.User.UUID.Set(randomid),
 					db.User.Email.Set(profile.Email),
 					db.User.Username.Set(profile.Name),
-					db.User.Platform.Set(util.HostDeezer),
+					db.User.Platforms.Set([]string{"deezer"}),
+					db.User.DeezerID.Set(uid),
+					db.User.SpotifyID.Set(""),
 					db.User.Avatar.Set(profile.Picture),
-					db.User.Token.Set(token), // T0DO: ENCRYPT THIS..
+					db.User.Token.Set(encryptedToken), // T0DO: ENCRYPT THIS..
 					db.User.Plan.Set(plan),
-					db.User.PlatformID.Set(uid),
+					// db.User.PlatformID.Set(uid),
 					db.User.Role.Set(db.RoleUSER),
+					db.User.Platforms.Set([]string{"deezer"}),
 				).Exec(context.Background())
 				if err != nil {
 					log.Println("Error saving new user")
@@ -161,11 +173,14 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 
 		// update here with new token
 		// log.Printf("New token for the user from deezer auth is: %s\n", token)
-		_, err = user.DB.User.FindOne(db.User.ID.Equals(existing.ID)).Update(db.User.Token.Set(token)).Exec(context.Background())
+		log.Printf("\n\nDEEZER ID TO SET IS: %s\n\n", platformid)
+		fnd, err := user.DB.User.FindUnique(db.User.ID.Equals(existing.ID)).Update(db.User.Token.Set(encryptedToken), db.User.DeezerID.Set(platformid)).Exec(context.Background())
 		if err != nil {
 			log.Println("Error updating user token")
 			return util.InternalServerError(ctx, err)
 		}
+
+		log.Printf("\n\n ONE FOUND IS AND UPDATED IS: %v\n\n", fnd)
 		clientURL := os.Getenv("CLIENT_URL")
 		claims.UUID = existing.UUID
 		signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
@@ -181,6 +196,22 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 		spotify, refreshToken, err := platforms.HostSpotifyUserAuth(authcode)
 		log.Println("Error with spotify auth: ", err)
 		log.Println("Here is the spotify user auth: ", spotify, refreshToken)
+
+		// secretKey := util.NewEncryptionKey()
+		secretKey := os.Getenv("SECRET_ENCRYPTION_KEY")
+		encrypedToken, err := util.Encrypt([]byte(refreshToken), []byte(secretKey))
+		if err != nil {
+			log.Println("Error encrypting text", err)
+		}
+
+		log.Printf("\n\n\nENCRYTPED DATA TO STRING IS: %v\n\n\n", encrypedToken)
+		decryptedText, err := util.Decrypt(encrypedToken, []byte(secretKey))
+		if err != nil {
+			log.Println("Error decrypting text", err)
+		}
+
+		log.Printf("\n\nEncrypted refreshToken is: %s\n\n", string(encrypedToken))
+		log.Printf("\n\nDecrypted refreshToken is: %s\n\n", string(decryptedText))
 		if err != nil {
 			log.Println("Error getting user")
 			log.Println(err)
@@ -194,8 +225,8 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 			UUID:          randomid,
 		}
 
-		existing, err := user.DB.User.FindOne(db.User.Email.Equals(spotify.Email)).Exec(context.Background())
-
+		existing, err := user.DB.User.FindFirst(db.User.Email.Equals(spotify.Email)).Exec(context.Background())
+		log.Println("The user found from spotify is", existing)
 		if err != nil {
 			log.Println("Error finding from the record")
 			if err == db.ErrNotFound {
@@ -217,12 +248,16 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 					db.User.UUID.Set(randomid),
 					db.User.Email.Set(spotify.Email),
 					db.User.Username.Set(spotify.DisplayName),
-					db.User.Platform.Set(util.HostSpotify),
+					db.User.Platforms.Equals([]string{"spotify"}),
+					db.User.DeezerID.Set(""),
+					db.User.SpotifyID.Set(spotify.ID),
+					// db.User.Platform.Set(util.HostSpotify),
 					db.User.Avatar.Set(ppix),
-					db.User.Token.Set(refreshToken),
+					db.User.Token.Set(encrypedToken),
 					db.User.Plan.Set(spotify.Product),
-					db.User.PlatformID.Set(spotify.ID),
+					// db.User.PlatformID.Set(spotify.ID),
 					db.User.Role.Set(db.RoleUSER),
+					db.User.Platforms.Set([]string{"spotify"}),
 				).Exec(context.Background())
 
 				if err != nil {
@@ -239,8 +274,15 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 				// return ctx.Status(http.StatusOK).JSON(redirectURL)
 			}
 		}
+
+		// get platforms first
+		for _, platform := range existing.Platforms {
+			if platform == util.HostDeezer {
+				// _, err = user.DB.User.FindFirst(db)
+			}
+		}
 		// update here with new token
-		_, err = user.DB.User.FindOne(db.User.ID.Equals(existing.ID)).Update(db.User.Token.Set(refreshToken)).Exec(context.Background())
+		_, err = user.DB.User.FindUnique(db.User.ID.Equals(existing.ID)).Update(db.User.Token.Set(encrypedToken)).Exec(context.Background())
 		if err != nil {
 			log.Println("Error updating user token")
 			return util.InternalServerError(ctx, err)
@@ -264,7 +306,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 // GetUserProfile updates a user profile
 func (user *User) GetUserProfile(ctx *fiber.Ctx) error {
 	uuid := ctx.Locals("uuid").(string)
-	existing, err := user.DB.User.FindOne(db.User.UUID.Equals(uuid)).Exec(context.Background())
+	existing, err := user.DB.User.FindFirst(db.User.UUID.Equals(uuid)).Exec(context.Background())
 	if err != nil {
 		log.Println("Error getting profile from DB")
 		log.Println(err)
@@ -279,7 +321,7 @@ func (user *User) GetUserProfile(ctx *fiber.Ctx) error {
 func (user *User) UpdateUserProfile(ctx *fiber.Ctx) error {
 	updateInfo := &types.UserProfileUpdate{}
 	uuid := ctx.Locals("uuid").(string)
-	existing, err := user.DB.User.FindOne(db.User.UUID.Equals(uuid)).Exec(context.Background())
+	existing, err := user.DB.User.FindFirst(db.User.UUID.Equals(uuid)).Exec(context.Background())
 	if err != nil {
 		if err == db.ErrNotFound {
 			return util.NotFound(ctx)
@@ -292,7 +334,7 @@ func (user *User) UpdateUserProfile(ctx *fiber.Ctx) error {
 	lastName = EXCLUDED.lastName, lang = EXCLUDED.lang, country = EXCLUDED.country, fullName = EXCLUDED.fullName, platform = EXCLUDED.platform,
 	avatar = EXCLUDED.avatar, token = EXCLUDED.token, plan = EXCLUDED.plan`,
 		existing.ID, updateInfo.Email, updateInfo.FirstName, updateInfo.LastName, existing.Country, existing.Lang, updateInfo.Username,
-		existing.Platform, existing.Avatar, existing.Token, existing.Plan).Exec(context.Background(), updateInfo)
+		existing.Platforms, existing.Avatar, existing.Token, existing.Plan).Exec(context.Background(), updateInfo)
 
 	if err != nil {
 		log.Println("Error executing raw SQL query on DB")
@@ -310,28 +352,31 @@ func (user *User) GetListeningHistory(ctx *fiber.Ctx) error {
 	history := []types.SingleTrack{}
 	uuid := ctx.Locals("uuid").(string)
 
-	existing, err := user.DB.User.FindOne(db.User.UUID.Equals(uuid)).Exec(context.Background())
+	existing, err := user.DB.User.FindFirst(db.User.UUID.Equals(uuid)).Exec(context.Background())
 	if err != nil {
 		log.Println("Error fetching user from DB")
 		return util.InternalServerError(ctx, err)
 	}
 
-	if existing.Platform == util.HostDeezer {
-		if existing.Token == "" {
-			// TODO: reauth user
-		}
-		history, err = platforms.HostDeezerFetchHistory(existing.Token)
-		if err != nil {
-			log.Println("Error fetching user deezer history")
-			log.Println(err)
-			return util.InternalServerError(ctx, err)
-		}
+	for _, platform := range existing.Platforms {
 
-	} else if existing.Platform == util.HostSpotify {
-		history, err = platforms.HostSpotifyListeningHistory(existing.Token)
-		if err != nil {
-			log.Printf("Error getting spotify listening history: %#v\n", err)
-			return util.InternalServerError(ctx, err)
+		if platform == util.HostDeezer {
+			if string(existing.Token) == "" {
+				// TODO: reauth user
+			}
+			history, err = platforms.HostDeezerFetchHistory(string(existing.Token))
+			if err != nil {
+				log.Println("Error fetching user deezer history")
+				log.Println(err)
+				return util.InternalServerError(ctx, err)
+			}
+
+		} else if platform == util.HostSpotify {
+			history, err = platforms.HostSpotifyListeningHistory(string(existing.Token))
+			if err != nil {
+				log.Printf("Error getting spotify listening history: %#v\n", err)
+				return util.InternalServerError(ctx, err)
+			}
 		}
 	}
 
@@ -362,13 +407,16 @@ func (user *User) GetArtistePlayHistory(ctx *fiber.Ctx) error {
 	conn := user.Redis.Get()
 	defer conn.Close()
 	uuid := ctx.Locals("uuid").(string)
-	existing, _ := user.DB.User.FindOne(db.User.UUID.Equals(uuid)).Exec(context.Background())
+	existing, _ := user.DB.User.FindFirst(db.User.UUID.Equals(uuid)).Exec(context.Background())
 
-	if existing.Platform == util.HostDeezer {
-		if existing.Token == "" {
-			// T0DO: implement auth user
+	for _, platform := range existing.Platforms {
+		if platform == util.HostDeezer {
+			if string(existing.Token) == "" {
+				// T0DO: implement auth user
+			}
 		}
 	}
+
 	key := fmt.Sprintf("user-%s", existing.UUID)
 	hist := &[]types.SingleTrack{}
 	cached, err := redis.String(conn.Do("GET", key))
@@ -406,7 +454,7 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 		UUID:          rand.String(),
 	}
 
-	existing, err := user.DB.User.FindOne(db.User.Email.Equals(newUser.Email)).Exec(context.Background())
+	existing, err := user.DB.User.FindFirst(db.User.Email.Equals(newUser.Email)).Exec(context.Background())
 	if err != nil {
 		if err == db.ErrNotFound {
 			log.Println("Not found")
@@ -420,13 +468,17 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 				db.User.UUID.Set(rand.String()),
 				db.User.Email.Set(newUser.Email),
 				db.User.Username.Set(newUser.Username),
-				db.User.Platform.Set(newUser.Platform),
+				db.User.Platforms.Equals([]string{newUser.Platform}),
+				db.User.DeezerID.Set(""),
+				db.User.SpotifyID.Set(""),
+				// db.User.Platform.Set(newUser.Platform),
 				db.User.Avatar.Set(newUser.Avatar),
-				db.User.Token.Set(newUser.Token),
+				db.User.Token.Set([]byte(newUser.Token)),
 				db.User.Plan.Set(newUser.Plan),
-				db.User.PlatformID.Set(newUser.PlatformID),
+				// db.User.PlatformID.Set(newUser.PlatformID),
 				db.User.Role.Set(db.RoleUSER),
 				db.User.CreatedAt.Set(time.Now()),
+				db.User.Platforms.Set([]string{"spotify"}),
 			).Exec(context.Background())
 			if err != nil {
 				log.Printf("[ERROR]: Error creating new user")
@@ -437,7 +489,7 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 				log.Println(err)
 				return util.InternalServerError(ctx, err)
 			}
-			n.Token = ""
+			n.Token = []byte("")
 			res := map[string]interface{}{
 				"token": signedJwt,
 				"user":  n,
@@ -465,13 +517,14 @@ func (user *User) SignupRedirect(ctx *fiber.Ctx) error {
 		DeezerAuthBase := os.Getenv("DEEZER_AUTH_BASE")
 		DeezerAppID := os.Getenv("DEEZER_APP_ID")
 		DeezerRedirectURI := os.Getenv("DEEZER_REDIRECT_URI")
-		scopes := "basic_access,email,offline_access,listening_history"
+		scopes := "basic_access,email,offline_access,listening_history,manage_library,delete_library,manage_community"
 		link := fmt.Sprintf("%s/auth.php?app_id=%s&redirect_uri=%s&perms=%s", DeezerAuthBase, DeezerAppID, DeezerRedirectURI, scopes)
 		return ctx.Redirect(link)
 	} else if platform == util.HostSpotify {
 		spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
-		scopes := url.QueryEscape(fmt.Sprintf("%s %s %s %s %s %s %s", spotify.ScopeUserReadPrivate, spotify.ScopeUserReadEmail,
+		scopes := url.QueryEscape(fmt.Sprintf("%s %s %s %s %s %s %s %s", spotify.ScopeUserReadPrivate, spotify.ScopeUserReadEmail,
 			spotify.ScopePlaylistModifyPublic, spotify.ScopeUserLibraryModify,
+			spotify.ScopePlaylistModifyPrivate,
 			spotify.ScopeUserTopRead, spotify.ScopeUserReadRecentlyPlayed,
 			spotify.ScopeUserReadCurrentlyPlaying))
 		spotifyRedirectURI := os.Getenv("SPOTIFY_REDIRECT_URI")
@@ -490,21 +543,23 @@ func (user *User) CreatePlaylist(ctx *fiber.Ctx) error {
 	newPlaylist := &types.NewPlaylist{}
 	err := ctx.BodyParser(&newPlaylist)
 
-	existing, _ := user.DB.User.FindOne(db.User.UUID.Equals(uuid)).Exec(context.Background())
+	existing, _ := user.DB.User.FindFirst(db.User.UUID.Equals(uuid)).Exec(context.Background())
 	if err != nil {
 		log.Println("Error parsing body into struct")
 		log.Println(err)
 		return util.InternalServerError(ctx, err)
 	}
 	if platform == util.HostDeezer {
-		err = platforms.HostDeezerCreatePlaylist(newPlaylist.Title, existing.UUID, existing.Token, newPlaylist.Payload)
+		err = platforms.HostDeezerCreatePlaylist(newPlaylist.Title, existing.UUID, string(existing.Token), newPlaylist.Payload)
 		if err != nil {
 			log.Println("Error creating playlists for deezer user")
 			log.Println(err)
 			return util.InternalServerError(ctx, err)
 		}
 	} else if platform == util.HostSpotify {
-		err := platforms.HostSpotifyCreatePlaylist(existing.UUID, newPlaylist.Title, existing.Token, newPlaylist.Payload)
+		log.Printf("New Playlist creation payload is: %v", newPlaylist)
+		log.Printf("\n\nUSER THAT WE ARE FETCHING ID FROM IS: %v\n\n", existing)
+		err = platforms.HostSpotifyCreatePlaylist(existing.SpotifyID, newPlaylist.Title, string(existing.Token), newPlaylist.Payload)
 		if err != nil {
 			log.Println("Error creating playlist for user for spotify")
 			log.Println(err)

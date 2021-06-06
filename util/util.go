@@ -1,8 +1,15 @@
 package util
 
 import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	goerrors "errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -208,7 +215,7 @@ func EncryptRefreshToken(refreshToken string) {}
 // MakeRequest makes the http request and marshalls the output inside src
 func MakeRequest(url string, src interface{}) error {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
-	// log.Printf("The URL we're calling is: %#v\n", url)
+	log.Printf("The URL we're calling is: %#v\n", url)
 	if err != nil {
 		log.Println("Error GETin URL")
 		return err
@@ -221,7 +228,6 @@ func MakeRequest(url string, src interface{}) error {
 	}
 	defer res.Body.Close()
 	body, err := ioutil.ReadAll(res.Body)
-	// log.Printf("Body is: %s", string(body))
 	if strings.Contains(string(body), `{"error`) {
 		return errors.NotFound
 	}
@@ -230,6 +236,7 @@ func MakeRequest(url string, src interface{}) error {
 		log.Println("Error reading response into memory")
 		return err
 	}
+	log.Printf("Body is: %s", string(body))
 	if res.StatusCode == http.StatusUnauthorized {
 		return errors.UnAuthorized
 	}
@@ -250,4 +257,151 @@ func MakeRequest(url string, src interface{}) error {
 	}
 
 	return nil
+}
+
+func FetchSpotifyAccessToken() (string, error) {
+	eencodedValues := url.Values{}
+	eencodedValues.Set("grant_type", "client_credentials")
+
+	req, err := http.NewRequest(http.MethodPost, "https://accounts.spotify.com/api/token", bytes.NewReader([]byte(eencodedValues.Encode())))
+	if err != nil {
+		log.Println("Error making POST request")
+		log.Println(err)
+		return "", nil
+	}
+	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
+	spotifyClientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", spotifyClientID, spotifyClientSecret)))
+
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", encodedCredentials))
+
+	client := http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		log.Println("Error making POST making request")
+		log.Println(err)
+		return "", err
+	}
+	defer response.Body.Close()
+	data, err := ioutil.ReadAll(response.Body)
+	if response.StatusCode == http.StatusUnauthorized {
+		log.Println("Not enough permission to make the request")
+		return "", err
+	}
+	type AuthTokenResponse struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int64  `json:"expires_in"`
+	}
+
+	reqOutput := &AuthTokenResponse{}
+	err = json.NewDecoder(bytes.NewReader(data)).Decode(reqOutput)
+	if err != nil {
+		log.Println("Error decoding reader")
+		log.Println(err)
+		return "", err
+	}
+	return reqOutput.AccessToken, nil
+}
+
+func RefreshAuthToken(refreshToken string) (string, error) {
+	encodedValues := url.Values{}
+	encodedValues.Set("grant_type", "refresh_token")
+	encodedValues.Set("refresh_token", refreshToken)
+
+	req, err := http.NewRequest(http.MethodPost, "https://accounts.spotify.com/api/token", bytes.NewReader([]byte(encodedValues.Encode())))
+	if err != nil {
+		log.Println("Error making POST request")
+		return "", err
+	}
+
+	spotifyClientID := os.Getenv("SPOTIFY_CLIENT_ID")
+	spotifyClientSecret := os.Getenv("SPOTIFY_CLIENT_SECRET")
+	encodedCredentials := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", spotifyClientID, spotifyClientSecret)))
+
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", encodedCredentials))
+
+	client := http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		log.Println("Error making POST making request")
+		log.Println(err)
+		return "", err
+	}
+	defer response.Body.Close()
+	data, err := ioutil.ReadAll(response.Body)
+	if response.StatusCode == http.StatusUnauthorized {
+		log.Println("Not enough permission to make the request")
+		return "", err
+	}
+	type AuthTokenResponse struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int64  `json:"expires_in"`
+		Scope       string `json:"scope"`
+	}
+
+	reqOutput := &AuthTokenResponse{}
+	err = json.NewDecoder(bytes.NewReader(data)).Decode(reqOutput)
+	if err != nil {
+		log.Println("Error decoding reader")
+		log.Println(err)
+		return "", err
+	}
+
+	log.Println("Scopes authorized for user is", reqOutput.Scope)
+	return reqOutput.AccessToken, nil
+}
+
+func NewEncryptionKey() *[32]byte {
+	key := [32]byte{}
+	_, err := io.ReadFull(rand.Reader, key[:])
+	if err != nil {
+		panic(err)
+	}
+	return &key
+}
+
+func Encrypt(plaintext []byte, key []byte) (ciphertext []byte, err error) {
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	_, err = io.ReadFull(rand.Reader, nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	return gcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+func Decrypt(ciphertext []byte, key []byte) (plaintext []byte, err error) {
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ciphertext) < gcm.NonceSize() {
+		return nil, goerrors.New("malformed ciphertext")
+	}
+
+	return gcm.Open(nil,
+		ciphertext[:gcm.NonceSize()],
+		ciphertext[gcm.NonceSize():],
+		nil,
+	)
 }

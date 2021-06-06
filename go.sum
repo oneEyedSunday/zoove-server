@@ -155,6 +155,8 @@ github.com/prisma/prisma-client-go v0.0.9 h1:BBbVszC+eB9MYhnN0nvjs6MZzXo4u6uDSow
 github.com/prisma/prisma-client-go v0.0.9/go.mod h1:N2XDbo3cYql1O0EjheOvS1q5g6vIlLzvNILdFUuYI/k=
 github.com/prisma/prisma-client-go v0.1.0 h1:EZ2AXXZ1CjiXc1zYJmmUBUvzpZ1UGChQvZz4rdKWFKo=
 github.com/prisma/prisma-client-go v0.1.0/go.mod h1:N2XDbo3cYql1O0EjheOvS1q5g6vIlLzvNILdFUuYI/k=
+github.com/prisma/prisma-client-go v0.9.0 h1:dsgEpAGLP0r7Fo6bX+aPBe6TEMKr2ug+IBtYrUd94qg=
+github.com/prisma/prisma-client-go v0.9.0/go.mod h1:8CNhFyx4n2yb2JdIFf1uL3XcZQsbPHo1P/Rs7hdnsGg=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/savsgio/gotils v0.0.0-20200608150037-a5f6f5aef16c/go.mod h1:TWNAOTaVzGOXq8RbEvHnhzA/A2sLZzgn0m6URjnukY8=
@@ -162,6 +164,8 @@ github.com/savsgio/gotils v0.0.0-20200616100644-13ff1fd2c28c h1:KKqhycXW1WVNkX7r
 github.com/savsgio/gotils v0.0.0-20200616100644-13ff1fd2c28c/go.mod h1:TWNAOTaVzGOXq8RbEvHnhzA/A2sLZzgn0m6URjnukY8=
 github.com/savsgio/gotils v0.0.0-20200909101946-939aa3fc74fb h1:XPJCVf85HPE2jMVEQ7QWrazaZo1lc94GbUWaQ8Yv5sM=
 github.com/savsgio/gotils v0.0.0-20200909101946-939aa3fc74fb/go.mod h1:TWNAOTaVzGOXq8RbEvHnhzA/A2sLZzgn0m6URjnukY8=
+github.com/shopspring/decimal v1.2.0 h1:abSATXmQEYyShuxI4/vyW3tV1MrKAJzCZ/0zLUXYbsQ=
+github.com/shopspring/decimal v1.2.0/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
 github.com/soveran/redisurl v0.0.0-20180322091936-eb325bc7a4b8 h1:rUK5c0TsYfhfhA5otEUzV46qjN8C2EoNPlyroy9A8Nk=
 github.com/soveran/redisurl v0.0.0-20180322091936-eb325bc7a4b8/go.mod h1:FVJ8jbHu7QrNFs3bZEsv/L5JjearIAY9N0oXh2wk+6Y=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"zoove/util"
 
@@ -53,9 +54,19 @@ func AuthorizeUser(ctx *fiber.Ctx) {
 }
 
 func CreatePlaylistChan(userID, title, token, platform string, tracks []string, ch chan bool) {
+	// find user with the id then extract their spotify and deezer IDs respectively
+	// _, err :=
+	secretKey := os.Getenv("SECRET_ENCRYPTION_KEY")
+	log.Printf("\n\nSecret Key to be used to decrypted is: %v\n\n", []byte(token))
 
+	decryptedToken, err := util.Decrypt([]byte(token), []byte(secretKey))
+	if err != nil {
+		log.Println("Error decrypting text here")
+		log.Println(err)
+	}
 	if platform == util.HostDeezer {
-		err := HostDeezerCreatePlaylist(url.QueryEscape(title), userID, token, tracks)
+
+		err = HostDeezerCreatePlaylist(url.QueryEscape(title), userID, string(decryptedToken), tracks)
 		if err != nil {
 			log.Println("Error creating playlist")
 			log.Println(err)
@@ -65,7 +76,8 @@ func CreatePlaylistChan(userID, title, token, platform string, tracks []string, 
 		ch <- true
 		return
 	} else if platform == util.HostSpotify {
-		spotifyTokens, err := HostSpotifyGetAuthorizedAcessToken(token)
+		spotifyTokens, err := HostSpotifyGetAuthorizedAcessToken(string(decryptedToken))
+		// spotifyTokens, err :=
 		if err != nil {
 			log.Println("Error getting correct access token for spotify")
 			log.Println(err)
@@ -86,7 +98,3 @@ func CreatePlaylistChan(userID, title, token, platform string, tracks []string, 
 	ch <- false
 	return
 }
-
-// type PlaylistToSearch struct {
-// 	Name
-// }

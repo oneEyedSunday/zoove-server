@@ -32,7 +32,7 @@ func (auth *AuthenticateMiddleware) AuthenticateUser(ctx *fiber.Ctx) error {
 	ten := ctx.Locals("token").(*jwt.Token)
 	claims := ten.Claims.(*types.Token)
 	ccx := context.TODO()
-	user, err := auth.DB.User.FindOne(db.User.UUID.Equals(claims.UUID)).Exec(ccx)
+	user, err := auth.DB.User.FindFirst(db.User.UUID.Equals(claims.UUID)).Exec(ccx)
 	if err != nil {
 		if err == db.ErrNotFound {
 			log.Println("User with that UUID doesnt exist")
