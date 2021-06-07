@@ -179,8 +179,8 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 			log.Println("Error updating user token")
 			return util.InternalServerError(ctx, err)
 		}
-
 		log.Printf("\n\n ONE FOUND IS AND UPDATED IS: %v\n\n", fnd)
+
 		clientURL := os.Getenv("CLIENT_URL")
 		claims.UUID = existing.UUID
 		signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
