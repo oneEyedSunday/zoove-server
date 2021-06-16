@@ -20,4 +20,4 @@ require (
 	golang.org/x/oauth2 v0.0.0-20210514164344-f6687ab2804c
 )
 
-replace github.com/prisma/prisma-client-go => /Users/ayodele/Desktop/open-src/prisma-client-go
+replace github.com/prisma/prisma-client-go => ./prisma-client
