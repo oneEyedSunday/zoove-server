@@ -78,6 +78,8 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 		// tracks = append(tracks, track, spot)
 	} else if extracted.Host == util.HostSpotify {
 		track, err := platforms.HostSpotifyGetSingleTrack(extracted.ID, jaeger.Pool)
+
+		log.Printf("\n\n\nThe result from the search is: %v\n\n\n", track)
 		if err != nil {
 			log.Println("Error getting the track from Spotify")
 			log.Println(err)
@@ -85,6 +87,7 @@ func (jaeger *Jaeger) JaegerHandler(ctx *fiber.Ctx) error {
 				log.Println("Track does not exist on spotify")
 				return util.NotFound(ctx)
 			}
+			return util.InternalServerError(ctx, err)
 		}
 		search := platforms.NewTrackToSearch(track.Title, track.Artistes[0], jaeger.Pool)
 		deez, err := search.HostDeezerSearchTrack()

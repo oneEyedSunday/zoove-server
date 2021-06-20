@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/fasthttp/websocket v1.4.3
+	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/gofiber/fiber/v2 v2.12.0
 	github.com/gofiber/jwt/v2 v2.2.2
 	github.com/gofiber/websocket/v2 v2.0.5

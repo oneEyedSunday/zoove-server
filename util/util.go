@@ -107,7 +107,7 @@ func SignJwtTokenExp(claims *types.Token, secret string) (string, error) {
 		UUID:           claims.UUID,
 		PlatformID:     claims.PlatformID,
 		Role:           claims.Role,
-		StandardClaims: jwt.StandardClaims{ExpiresAt: time.Now().Add(time.Minute * 30).Unix()},
+		StandardClaims: jwt.StandardClaims{ExpiresAt: time.Now().Add(time.Hour * 2).Unix()},
 	})
 
 	tokenString, err := token.SignedString([]byte(secret))

@@ -8,7 +8,8 @@ import (
 	"zoove/types"
 	"zoove/util"
 
-	"github.com/dgrijalva/jwt-go"
+	// "github.com/dgrijalva/jwt-go"
+	jwt "github.com/form3tech-oss/jwt-go"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -21,6 +22,7 @@ func ExtractedInfoMiddleware(ctx *fiber.Ctx) error {
 		return util.BadRequest(ctx, err)
 	}
 	ctx.Locals("extractedInfo", extracted)
+	log.Println("Extracted search URL from the pasted URL is: ", extracted)
 	return ctx.Next()
 }
 

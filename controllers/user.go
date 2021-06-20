@@ -44,7 +44,6 @@ func NewUserHandler(db *db.PrismaClient, pool *redis.Pool) *User {
 // VerifyDeezerSignup verifies the access token a user copied is still valid
 func (user *User) VerifyDeezerSignup(ctx *fiber.Ctx) error {
 	jwtToken := ctx.Query("token")
-	log.Printf("Token is... %s", jwtToken)
 	prs, err := util.ParseJwtToken(jwtToken, os.Getenv("JWT_SECRET"))
 	if err != nil {
 		return util.RequestUnAuthorized(ctx, err)
@@ -62,7 +61,7 @@ func (user *User) VerifyDeezerSignup(ctx *fiber.Ctx) error {
 		UUID:          existing.UUID,
 	}
 
-	signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+	signedJwt, err := util.SignJwtTokenExp(claims, os.Getenv("JWT_SECRET"))
 	if err != nil {
 		log.Println(err)
 		return util.InternalServerError(ctx, err)
@@ -183,7 +182,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 
 		clientURL := os.Getenv("CLIENT_URL")
 		claims.UUID = existing.UUID
-		signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+		signedJwt, err := util.SignJwtTokenExp(claims, os.Getenv("JWT_SECRET"))
 		_ = map[string]string{
 			"token": signedJwt,
 		}
@@ -230,7 +229,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 		if err != nil {
 			log.Println("Error finding from the record")
 			if err == db.ErrNotFound {
-				signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+				signedJwt, err := util.SignJwtTokenExp(claims, os.Getenv("JWT_SECRET"))
 				ppix := ""
 				if len(spotify.Images) == 0 {
 					ppix = ""
@@ -290,7 +289,7 @@ func (user *User) AuthorizeUser(ctx *fiber.Ctx) error {
 
 		clientURL := os.Getenv("CLIENT_URL")
 		claims.UUID = existing.UUID
-		signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+		signedJwt, err := util.SignJwtTokenExp(claims, os.Getenv("JWT_SECRET"))
 		_ = map[string]string{
 			"token": signedJwt,
 		}
@@ -484,7 +483,7 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 				log.Printf("[ERROR]: Error creating new user")
 				return util.InternalServerError(ctx, err)
 			}
-			signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+			signedJwt, err := util.SignJwtTokenExp(claims, os.Getenv("JWT_SECRET"))
 			if err != nil {
 				log.Println(err)
 				return util.InternalServerError(ctx, err)
@@ -498,7 +497,7 @@ func (user *User) AddNewUser(ctx *fiber.Ctx) error {
 		}
 	}
 
-	signedJwt, err := util.SignJwtToken(claims, os.Getenv("JWT_SECRET"))
+	signedJwt, err := util.SignJwtTokenExp(claims, os.Getenv("JWT_SECRET"))
 	if err != nil {
 		return util.InternalServerError(ctx, err)
 	}

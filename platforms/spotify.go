@@ -309,8 +309,10 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 	key := fmt.Sprintf("%s-%s", "spotify", spotifyID)
 	values, err := redis.String(conn.Do("GET", key))
 	if err != nil {
-		// log.Println("Error getting single track")
+		log.Println("Error getting single track")
+		log.Println(err)
 		if err == redis.ErrNil {
+			log.Println("Does not exist in redis")
 			tokens, err := GetSpotifyAuthToken()
 			if err != nil {
 				return nil, err
@@ -318,6 +320,11 @@ func HostSpotifyGetSingleTrack(spotifyID string, pool *redis.Pool) (*types.Singl
 
 			sptf := &types.HostSpotifyTrack{}
 			err = MakeSpotifyRequest(fmt.Sprintf("%s/v1/tracks/%s", os.Getenv("SPOTIFY_API_BASE"), spotifyID), tokens.AccessToken, sptf)
+			if err != nil {
+				log.Printf("\n\nError with spotify request here: %v\n\n", err)
+			}
+
+			log.Printf("Fectched spotify data is: %v", sptf)
 			single := &types.SingleTrack{
 				Cover:       sptf.Album.Images[0].URL,
 				Duration:    sptf.DurationMs,
@@ -676,8 +683,11 @@ func MakeSpotifyRequest(url, token string, out interface{}) error {
 	if err != nil {
 		return err
 	}
+
 	body, err := ioutil.ReadAll(res.Body)
+	log.Printf("\nSearch result body: %s\n", string(body))
 	if err != nil {
+		log.Println("Response body error")
 		return err
 	}
 	defer res.Body.Close()
