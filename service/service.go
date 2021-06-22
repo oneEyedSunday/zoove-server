@@ -56,6 +56,22 @@ func (listener *SocketListener) GetTrackListener() {
 			return redisConnect, err
 		},
 	}
+
+	client := db.NewClient()
+	err := client.Connect()
+
+	if err != nil {
+		log.Println("Error creating new DB connection")
+		log.Fatalln(err)
+	}
+
+	defer func() {
+		err := client.Disconnect()
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}()
+
 	// log.Println("Deserialized extracted URL (TRACK) is: ", listener.deserialize.URL)
 	extracted, err := util.ExtractInfoMetadata(listener.Deserialize.URL)
 	if err != nil {
