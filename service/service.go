@@ -72,6 +72,9 @@ func (listener *SocketListener) GetTrackListener() {
 		}
 	}()
 
+	listener.Client = client
+	log.Println("DB connection made.")
+
 	// log.Println("Deserialized extracted URL (TRACK) is: ", listener.deserialize.URL)
 	extracted, err := util.ExtractInfoMetadata(listener.Deserialize.URL)
 	if err != nil {
