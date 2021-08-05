@@ -285,6 +285,24 @@ func (listener *SocketListener) GetPlaylistListener() {
 // CreatePlaylistListener creates a playlist for a user.
 func (listener *SocketListener) CreatePlaylistListener() {
 
+	client := db.NewClient()
+	err := client.Connect()
+
+	if err != nil {
+		log.Println("Error creating new DB connection")
+		log.Fatalln(err)
+	}
+
+	defer func() {
+		err := client.Disconnect()
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}()
+
+	listener.Client = client
+	log.Println("DB connection made.")
+
 	existing, _ := listener.Client.User.FindFirst(db.User.UUID.Equals(listener.Deserialize.UserID)).Exec(context.Background())
 	log.Printf("\n\nEXISTING USER GOTTEN IS: %v\n\n", existing)
 	log.Printf("\n\nPlatform is: %v\n\n", listener.Deserialize.Payload)
